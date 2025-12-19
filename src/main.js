@@ -29,6 +29,35 @@ const provider = new GoogleAuthProvider();
 const $ = (id) => document.getElementById(id);
 const msg = (t) => ($("msg").textContent = t || "");
 
+const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAdmin(user) {
+  return !!user?.email && ADMIN_EMAILS.includes(user.email);
+}
+
+let debugGuestMode = localStorage.getItem("debugGuestMode") === "1";
+
+function canEditAll() {
+  return !!currentUser && isAdmin(currentUser) && !debugGuestMode;
+}
+function canEditLimited() {
+  return !!currentUser && !canEditAll();
+}
+function canEditField(field) {
+  if (!currentUser) return false;
+  if (canEditAll()) return true;
+  return field === "reference";
+}
+function canEditDirector() {
+  return !!currentUser && (canEditAll() || canEditLimited());
+}
+function canEditComment() {
+  return canEditAll();
+}
+
 function who() {
   return currentUser?.displayName || currentUser?.email || currentUser?.uid || "";
 }
@@ -88,14 +117,37 @@ function renderStatusTag(value){
   const s = statusMap.get(value);
   if(!value) return `<span class="tagPill">—</span>`;
   if(!s) return `<span class="tagPill">${value}</span>`;
-  const text = pickTextColor(s.color);
   // ほんのり色つけ（背景薄め + 枠濃いめ）
   const bg = s.color + "22";
   const bd = s.color + "55";
-  return `<span class="tagPill" style="background:${bg};border-color:${bd};color:${text}">${s.label}</span>`;
-}
+  return `<span class="tagPill" style="background:${bg};border-color:${bd};color:var(--tag-text)">${s.label}</span>`;
+  }
 
-function renderSelectCell(innerHtml){
+  function parseDateISO(dateStr){
+    const parts = String(dateStr || "").split("-").map((v) => parseInt(v, 10));
+    if (parts.length < 3 || parts.some((n) => Number.isNaN(n))) return null;
+    const [y, m, d] = parts;
+    return new Date(y, m - 1, d);
+  }
+
+  function formatDateShort(dt){
+    if (!(dt instanceof Date) || Number.isNaN(dt.getTime())) return "";
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const d = String(dt.getDate()).padStart(2, "0");
+    return `${y}/${m}/${d}`;
+  }
+
+  function renderNextScheduleTag(value){
+    if (!value || !value.status) return `<span class="muted">—</span>`;
+    const color = value.color || "#6fd6ff";
+    const bg = color + "22";
+    const bd = color + "55";
+    const label = `${value.dateLabel || value.date || ""} ${value.status}`.trim();
+    return `<span class="tagPill" style="background:${bg};border-color:${bd};color:var(--tag-text)">${escapeHtml(label)}</span>`;
+  }
+
+  function renderSelectCell(innerHtml){
   const v = innerHtml || `<span class="muted">&mdash;</span>`;
   return `
     <div class="ddCell">
@@ -109,12 +161,14 @@ function selectEditor(cell, onRendered, success, cancel, editorParams){
   const params = (typeof editorParams === "function") ? editorParams(cell) : (editorParams || {});
   const valuesSrc = params.values ?? params;
   const select = document.createElement("select");
+  select.className = "sheetSelect";
 
   select.style.width = "100%";
   select.style.height = "28px";
   select.style.borderRadius = "8px";
-  select.style.border = "1px solid rgba(15,23,42,.15)";
-  select.style.background = "#fff";
+  select.style.border = "1px solid var(--line)";
+  select.style.background = "var(--panel)";
+  select.style.color = "var(--text)";
 
   const addOption = (value, label) => {
     const opt = document.createElement("option");
@@ -172,7 +226,7 @@ function renderLenTag(v){
   if(!v) return `<span class="tagPill">&mdash;</span>`;
   const s = lenMap.get(v);
   if(!s) return `<span class="tagPill">${v}</span>`;
-  return `<span class="tagPill" style="background:${s.color}22;border-color:${s.color}55;color:${pickTextColor(s.color)}">${s.label}</span>`;
+  return `<span class="tagPill" style="background:${s.color}22;border-color:${s.color}55;color:var(--tag-text)">${s.label}</span>`;
 }
 
 function applyLenUI(){
@@ -211,6 +265,7 @@ function applyStatusUI(){
       width: 130,
       formatter: (cell) => renderSelectCell(renderStatusTag(cell.getValue())),
       editor: selectEditor,
+      editable: () => canEditField("status"),
       editorParams: () => {
         const values = {};
         statuses.forEach((s) => {
@@ -221,6 +276,7 @@ function applyStatusUI(){
       cellClick: (e, cell) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!canEditField("status")) return;
         cell.edit(true);
       },
     });
@@ -231,6 +287,9 @@ function openStatusModal(){
   $("overlay").classList.remove("hidden");
   $("statusModal").classList.remove("hidden");
   renderStatusList();
+  updateBulkToggle();
+  updateGuestToggle();
+  applyPermissionUI();
 }
 function closeStatusModal(){
   $("overlay").classList.add("hidden");
@@ -240,18 +299,25 @@ function closeStatusModal(){
 function renderStatusList(){
   const host = $("statusList");
   host.innerHTML = "";
+  const editable = canEditAll();
 
   statuses.forEach((s, idx) => {
     const row = document.createElement("div");
     row.className = "statusRow";
     row.innerHTML = `
-      <input type="text" value="${s.label}" data-k="label" data-i="${idx}" placeholder="表示名" />
-      <input type="text" value="${s.value}" data-k="value" data-i="${idx}" placeholder="保存値（英数推奨）" />
-      <input type="color" value="${s.color}" data-k="color" data-i="${idx}" />
-      <button class="smallBtn" data-act="del" data-i="${idx}">削除</button>
+      <input type="text" value="${s.label}" data-k="label" data-i="${idx}" placeholder="表示名" ${editable ? "" : "disabled"} />
+      <input type="text" value="${s.value}" data-k="value" data-i="${idx}" placeholder="保存値（英数推奨）" ${editable ? "" : "disabled"} />
+      <input type="color" value="${s.color}" data-k="color" data-i="${idx}" ${editable ? "" : "disabled"} />
+      <button class="smallBtn" data-act="del" data-i="${idx}" ${editable ? "" : "disabled"}>削除</button>
     `;
     host.appendChild(row);
   });
+
+  if (!editable) {
+    host.oninput = null;
+    host.onclick = null;
+    return;
+  }
 
   host.oninput = (e) => {
     const t = e.target;
@@ -273,6 +339,10 @@ function renderStatusList(){
 }
 
 async function saveStatuses(){
+  if (!canEditAll()) {
+    msg("管理者のみ変更できます");
+    return;
+  }
   // value重複を軽くケア（空は消す）
   statuses = statuses
     .map(s => ({...s, value:(s.value||"").trim(), label:(s.label||"").trim()}))
@@ -324,6 +394,82 @@ function listenUISettings(projectId){
   });
 }
 
+function buildNextScheduleMap(state){
+  scheduleStatusMap = new Map();
+  (state?.statuses || []).forEach((st) => {
+    if (!st || !st.name) return;
+    scheduleStatusMap.set(st.name, st.color || "#6fd6ff");
+  });
+
+  const schedule = state?.schedule || {};
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const nextMap = new Map();
+  Object.keys(schedule).forEach((trackId) => {
+    const sched = schedule[trackId];
+    if (!sched || typeof sched !== "object") return;
+    let closest = null;
+    Object.keys(sched).forEach((dateStr) => {
+      const status = sched[dateStr];
+      if (!status || status === "none") return;
+      const dt = parseDateISO(dateStr);
+      if (!dt) return;
+      if (dt < today) return;
+      if (!closest || dt < closest.dt) {
+        closest = { dt, dateStr, status };
+      }
+    });
+    if (!closest) return;
+    const color = scheduleStatusMap.get(closest.status) || "#6fd6ff";
+    nextMap.set(trackId, {
+      status: closest.status,
+      date: closest.dateStr,
+      dateLabel: formatDateShort(closest.dt),
+      color,
+    });
+  });
+
+  scheduleNextMap = nextMap;
+}
+
+function applyScheduleNextToRows(){
+  if (!table || !table.getData) return;
+  const rows = table.getData();
+  if (!rows.length) return;
+  const updates = rows.map((r) => ({
+    id: r.id,
+    nextSchedule: scheduleNextMap.get(r.id) || null,
+  }));
+  table.updateData(updates);
+}
+
+function listenScheduleBoard(projectId){
+  if (scheduleUnsub) scheduleUnsub();
+  scheduleNextMap = new Map();
+  scheduleStatusMap = new Map();
+  if (!projectId) {
+    applyScheduleNextToRows();
+    return;
+  }
+
+  const ref = doc(db, "projects", projectId, "scheduleBoard", "state");
+  scheduleUnsub = onSnapshot(ref, (snap) => {
+    if (!snap.exists()) {
+      scheduleNextMap = new Map();
+      scheduleStatusMap = new Map();
+      applyScheduleNextToRows();
+      return;
+    }
+    const data = snap.data() || {};
+    const state = data.state || data;
+    buildNextScheduleMap(state);
+    applyScheduleNextToRows();
+  }, (err) => {
+    console.error(err);
+  });
+}
+
 function updateStatusPreview(){
   const v = $("f_status")?.value || "";
   $("statusTagPreview").outerHTML = `<span id="statusTagPreview" class="tagPill">${(statusMap.get(v)?.label || v || "—")}</span>`;
@@ -343,6 +489,9 @@ let currentProjectId = $("projectId").value.trim();
 let unsub = null;
 let pendingSelectId = null;
 let projectNameLoaded = false;
+let scheduleUnsub = null;
+let scheduleNextMap = new Map();
+let scheduleStatusMap = new Map();
 
 const table = new Tabulator("#grid", {
   height: "100%",
@@ -355,18 +504,20 @@ const table = new Tabulator("#grid", {
   columns: [
     {
       formatter: "handle",
+      field: "__handle",
       width: 34,
       hozAlign: "center",
       headerSort: false,
       rowHandle: true,
     },
     { title: "#M", field: "m", width: 70, headerSort: true },
-    { title: "V", field: "v", width: 55, editor: "input" },
-    { title: "demo", field: "demo", width: 80, editor: "input" },
-    { title: "scene", field: "scene", minWidth: 180, editor: "input" },
+    { title: "V", field: "v", width: 55, editor: "input", editable: () => canEditField("v") },
+    { title: "demo", field: "demo", width: 80, editor: "input", editable: () => canEditField("demo") },
+    { title: "scene", field: "scene", minWidth: 180, editor: "input", editable: () => canEditField("scene") },
     { title:"長さ", field:"len", width:120,
       formatter:(cell)=>renderSelectCell(renderLenTag(cell.getValue())),
       editor: selectEditor,
+      editable: () => canEditField("len"),
       editorParams: () => {
         const values = {};
         lenOptions.forEach((s) => {
@@ -377,6 +528,7 @@ const table = new Tabulator("#grid", {
       cellClick: (e, cell) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!canEditField("len")) return;
         cell.edit(true);
       },
     },
@@ -386,6 +538,7 @@ const table = new Tabulator("#grid", {
       width: 130,
       formatter: (cell) => renderSelectCell(renderStatusTag(cell.getValue())),
       editor: selectEditor,
+      editable: () => canEditField("status"),
       editorParams: () => {
         const values = {};
         statuses.forEach((s) => {
@@ -396,11 +549,16 @@ const table = new Tabulator("#grid", {
       cellClick: (e, cell) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!canEditField("status")) return;
         cell.edit(true);
       },
     },
-    { title: "memo(省略)", field: "memo", minWidth: 180,
-      formatter: (cell) => (cell.getValue() || "").replace(/\s+/g," ").slice(0,30) + ((cell.getValue()||"").length>30?"…":"")
+    {
+      title: "直近予定",
+      field: "nextSchedule",
+      width: 180,
+      headerSort: false,
+      formatter: (cell) => renderNextScheduleTag(cell.getValue()),
     },
     { title: "監督FB(省略)", field: "director", minWidth: 220,
       headerSort: false,
@@ -415,6 +573,11 @@ const table = new Tabulator("#grid", {
         const row = cell.getData();
         return buildLogPreview(row.commentLog, row.comment, 40);
       },
+    },
+    { title: "参考曲", field: "reference", minWidth: 200, headerSort: false,
+      editor: "input",
+      editable: () => canEditField("reference"),
+      formatter: formatReferenceCell,
     },
     {
       title: "更新",
@@ -431,8 +594,8 @@ const table = new Tabulator("#grid", {
         </div>`;
       },
     },
-    { title: "IN TC", field: "in", width: 110, editor: "input" },
-    { title: "OUT TC", field: "out", width: 110, editor: "input" },
+    { title: "IN TC", field: "in", width: 110, editor: "input", editable: () => canEditField("in") },
+    { title: "OUT TC", field: "out", width: 110, editor: "input", editable: () => canEditField("out") },
     { title: "INT TC", field: "interval", width: 110, headerSort: false },
   ],
 });
@@ -445,10 +608,115 @@ const undoStack = [];
 const UNDO_MAX = 50;
 const BULK_FIELDS = new Set(["status", "len", "scene", "demo", "memo", "in", "out"]);
 
-$("btnBulk")?.addEventListener("click", () => {
-  bulkMode = !bulkMode;
-  $("btnBulk").textContent = `一括編集: ${bulkMode ? "ON" : "OFF"}`;
+function updateBulkToggle(){
+  const el = $("toggleBulk");
+  if (el) el.checked = bulkMode;
+  const label = $("bulkState");
+  if (label) label.textContent = bulkMode ? "ON" : "OFF";
+}
+
+function setBulkMode(next){
+  bulkMode = !!next;
+  updateBulkToggle();
+}
+
+$("toggleBulk")?.addEventListener("change", () => {
+  if (!canEditAll()) {
+    setBulkMode(false);
+    return;
+  }
+  setBulkMode($("toggleBulk").checked);
 });
+
+function updateGuestToggle(){
+  const el = $("toggleGuest");
+  if (!el) return;
+  el.checked = debugGuestMode;
+  el.disabled = !isAdmin(currentUser);
+  const label = $("guestState");
+  if (label) label.textContent = debugGuestMode ? "ON" : "OFF";
+}
+
+function setDebugGuestMode(next){
+  debugGuestMode = !!next;
+  localStorage.setItem("debugGuestMode", debugGuestMode ? "1" : "0");
+  updateGuestToggle();
+  applyPermissionUI();
+}
+
+$("toggleGuest")?.addEventListener("change", () => {
+  if (!isAdmin(currentUser)) {
+    updateGuestToggle();
+    return;
+  }
+  setDebugGuestMode($("toggleGuest").checked);
+});
+
+function applyPermissionUI(){
+  const adminUser = isAdmin(currentUser);
+  const canAll = canEditAll();
+  const guestView = !!currentUser && !canAll;
+
+  const settingsBtn = $("btnSettings");
+  if (settingsBtn) settingsBtn.style.display = adminUser ? "" : "none";
+
+  const btnAdd = $("btnAddRow");
+  if (btnAdd) btnAdd.style.display = canAll ? "" : "none";
+  const btnDel = $("btnDeleteRow");
+  if (btnDel) btnDel.style.display = canAll ? "" : "none";
+  const btnUndo = $("btnUndo");
+  if (btnUndo) btnUndo.style.display = canAll ? "" : "none";
+
+  if (!canAll) setBulkMode(false);
+  const bulkToggle = $("toggleBulk");
+  if (bulkToggle) bulkToggle.disabled = !canAll;
+  updateBulkToggle();
+
+  const fps = $("fpsDefault");
+  if (fps) fps.disabled = !canAll;
+
+  const dirInput = $("f_director_new");
+  if (dirInput) dirInput.disabled = !canEditDirector();
+  const dirBtn = $("btnAddDirectorFB");
+  if (dirBtn) dirBtn.disabled = !canEditDirector();
+
+  const commentInput = $("f_comment_new");
+  if (commentInput) commentInput.disabled = guestView || !currentUser;
+  const commentBtn = $("btnAddComment");
+  if (commentBtn) commentBtn.disabled = guestView || !currentUser;
+
+  const refInput = $("f_reference");
+  if (refInput) refInput.disabled = !currentUser;
+
+  ["f_memo", "f_len", "f_status", "f_note", "f_in", "f_out"].forEach((id) => {
+    const el = $(id);
+    if (el) el.disabled = guestView;
+  });
+
+  const statusList = $("statusList");
+  if (statusList) {
+    statusList.querySelectorAll("input, button").forEach((el) => {
+      el.disabled = !canAll;
+    });
+  }
+  const btnAddStatus = $("btnAddStatus");
+  if (btnAddStatus) btnAddStatus.disabled = !canAll;
+  const btnSaveStatuses = $("btnSaveStatuses");
+  if (btnSaveStatuses) btnSaveStatuses.disabled = !canAll;
+
+  updateGuestToggle();
+
+  try{
+    table.updateColumnDefinition("__handle", { visible: canAll });
+  }catch(_){}
+
+  if (selectedId) {
+    const row = table.getRow(selectedId);
+    const data = row?.getData?.() || {};
+    renderDirectorLog(data.directorLog || []);
+    renderCommentLog(data.commentLog || []);
+  }
+}
 
 $("btnUndo")?.addEventListener("click", () => {
   undo().catch(console.error);
@@ -484,6 +752,10 @@ async function applyBatch(changes, { pushUndo = true } = {}) {
 async function undo() {
   if (!currentUser) {
     msg("ログインしてね");
+    return;
+  }
+  if (!canEditAll()) {
+    msg("管理者のみ利用できます");
     return;
   }
   const last = undoStack.pop();
@@ -524,6 +796,20 @@ table.on("cellEdited", async (cell) => {
     const value = cell.getValue();
     const old = cell.getOldValue?.() ?? row[field];
     const fps = (window.__FPS_DEFAULT__ || "24");
+
+    if (!canEditField(field)) {
+      applying = true;
+      cell.setValue(old, true);
+      applying = false;
+      msg("ゲストは監督FBと参考曲のみ編集できます");
+      setTimeout(() => msg(""), 900);
+      return;
+    }
+
+    if (field === "reference" && selectedId === row.id && $("f_reference")) {
+      $("f_reference").value = value ?? "";
+      renderReferencePreview($("f_reference").value);
+    }
 
     const selectedRows = table.getSelectedRows().map((r) => r.getData()).filter((d) => d?.id);
     const isBulk = bulkMode && selectedRows.length >= 2 && BULK_FIELDS.has(field);
@@ -609,24 +895,32 @@ function setInspector(row){
     renderCommentLog([]);
     $("f_director_new").value = "";
     $("f_comment_new").value = "";
+    if ($("f_reference")) $("f_reference").value = "";
+    renderReferencePreview("");
     $("f_in").value = "";
     $("f_out").value = "";
     $("f_interval").value = "";
     return;
   }
-  const d = row.getData();
-  selectedId = d.id;
-  if ($("selMeta")) {
-    $("selMeta").textContent = `選択中: #M ${d.m ?? ""} / scene ${d.scene ?? ""} / demo ${d.demo ?? ""}`;
-    $("selMeta").classList.remove("selMetaEmpty");
-  }
-  $("f_m").value = d.m ?? "";
-  $("f_v").value = d.v ?? "";
-  $("f_demo").value = d.demo ?? "";
-  $("f_scene").value = d.scene ?? "";
+    const d = row.getData();
+    selectedId = d.id;
+    if ($("selMeta")) {
+      const memo = String(d.memo || "").trim();
+      const note = String(d.note || "").trim();
+      const label = [memo, note].find((v) => v) || "選択中の行";
+      $("selMeta").textContent = `選択中: ${label}`;
+      $("selMeta").classList.remove("selMetaEmpty");
+    }
+  if ($("f_m")) $("f_m").value = d.m ?? "";
+  if ($("f_v")) $("f_v").value = d.v ?? "";
+  if ($("f_demo")) $("f_demo").value = d.demo ?? "";
+  if ($("f_scene")) $("f_scene").value = d.scene ?? "";
   $("f_status").value = d.status ?? "";
   $("f_len").value = d.len ?? "";
   $("f_memo").value = d.memo ?? "";
+  $("f_note").value = d.note ?? "";
+  if ($("f_reference")) $("f_reference").value = d.reference ?? "";
+  renderReferencePreview($("f_reference")?.value || "");
   $("f_in").value = d.in ?? "";
   $("f_out").value = d.out ?? "";
   const fps = (window.__FPS_DEFAULT__ || "24");
@@ -682,6 +976,119 @@ function buildLinkPreviews(text){
   return `<div class="linkPreviewGrid">${cards}</div>`;
 }
 
+const referenceTitleCache = new Map();
+const referenceTitlePending = new Set();
+
+function normalizeReferenceUrl(raw){
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  try{
+    return new URL(s).toString();
+  }catch{
+    return s;
+  }
+}
+
+function referenceProviderLabel(url){
+  if (youtubeId(url)) return "YouTube";
+  try{
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    if (host.includes("spotify.com")) return "Spotify";
+    if (host.includes("music.apple.com")) return "Apple Music";
+    return host || "Link";
+  }catch{
+    return "Link";
+  }
+}
+
+async function fetchReferenceTitle(url){
+  const encoded = encodeURIComponent(url);
+  const isYoutube = youtubeId(url);
+  const isSpotify = /spotify\.com/i.test(url);
+  const isApple = /music\.apple\.com/i.test(url);
+  let endpoint = "";
+
+  if (isYoutube) {
+    endpoint = `https://www.youtube.com/oembed?format=json&url=${encoded}`;
+  } else if (isSpotify) {
+    endpoint = `https://open.spotify.com/oembed?url=${encoded}`;
+  } else if (isApple) {
+    endpoint = `https://embed.music.apple.com/oembed?url=${encoded}`;
+  }
+
+  if (!endpoint) return "";
+  const res = await fetch(endpoint);
+  if (!res.ok) return "";
+  const data = await res.json().catch(() => null);
+  return (data && data.title) ? String(data.title).trim() : "";
+}
+
+function buildReferenceCellHtml(raw, url, title){
+  const provider = referenceProviderLabel(url);
+  const label = title ? previewText(title, 30) : previewText(url || raw, 34);
+  const text = `${provider}: ${label}`;
+  return `<a class="linkMini" href="${url}" target="_blank" rel="noopener">${escapeHtml(text)}</a>`;
+}
+
+function formatReferenceCell(cell, formatterParams, onRendered){
+  const raw = String(cell.getValue() || "").trim();
+  if(!raw) return "";
+  const urls = extractUrls(raw);
+  const link = urls[0] || "";
+  if(!link){
+    const display = previewText(raw, 34);
+    return `<span class="muted">${escapeHtml(display)}</span>`;
+  }
+
+  const normalized = normalizeReferenceUrl(link);
+  const hasCache = referenceTitleCache.has(normalized);
+  const cachedTitle = hasCache ? referenceTitleCache.get(normalized) : "";
+
+  if(!hasCache && !referenceTitlePending.has(normalized)){
+    referenceTitlePending.add(normalized);
+    const valueSnapshot = raw;
+    onRendered(() => {
+      fetchReferenceTitle(normalized)
+        .then((title) => {
+          referenceTitlePending.delete(normalized);
+          referenceTitleCache.set(normalized, title || "");
+          if (String(cell.getValue() || "").trim() !== valueSnapshot) return;
+          if (!title) return;
+          const el = cell.getElement();
+          if (el) el.innerHTML = buildReferenceCellHtml(valueSnapshot, normalized, title);
+        })
+        .catch(() => {
+          referenceTitlePending.delete(normalized);
+        });
+    });
+  }
+
+  return buildReferenceCellHtml(raw, normalized, cachedTitle || "");
+}
+
+function renderReferencePreview(value){
+  const host = $("referencePreview");
+  if(!host) return;
+  const raw = String(value || "").trim();
+  const urls = extractUrls(raw);
+  if(!raw){
+    host.innerHTML = `<div class="muted">YouTubeリンクを入れるとプレビューできます</div>`;
+    return;
+  }
+  if(urls.length === 0){
+    host.innerHTML = `<div class="muted">${escapeHtml(raw)}</div>`;
+    return;
+  }
+  const yt = urls.find((u) => youtubeId(u));
+  if(yt){
+    const id = youtubeId(yt);
+    host.innerHTML = `<iframe src="https://www.youtube.com/embed/${id}" title="YouTube preview" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
+    return;
+  }
+  const link = urls[0];
+  host.innerHTML = `<a href="${link}" target="_blank" rel="noopener">リンクを開く</a>`;
+}
+
 function renderDirectorLog(list){
   const host = document.getElementById("directorLog");
   const showArchived = document.getElementById("showDirectorArchived")?.checked;
@@ -699,6 +1106,7 @@ function renderDirectorLog(list){
   const viewSorted = view
     .sort((a, b) => (a?.at?.seconds || 0) - (b?.at?.seconds || 0));
 
+  const canEdit = canEditDirector();
   host.innerHTML = viewSorted
     .map((item, idx) => {
       const by = item.by || "";
@@ -708,17 +1116,28 @@ function renderDirectorLog(list){
       const archived = !!item.archived;
       const action = archived ? "restoreDirector" : "archiveDirector";
       const actionLabel = archived ? "戻す" : "アーカイブ";
+      const actions = canEdit
+        ? `
+          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
+            <button class="smallBtn danger" type="button" data-act="deleteDirector" data-idx="${idx}">消去</button>
+          </div>
+        `
+        : "";
       return `
         <div class="logItem">
           <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
-          <div style="margin-top:8px; display:flex; gap:8px;">
-            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
-          </div>
+          ${actions}
         </div>
       `;
     }).join("");
+
+  if (!canEdit) {
+    host.onclick = null;
+    return;
+  }
 
   host.onclick = async (e)=>{
     const btn = e.target?.closest("button[data-act]");
@@ -741,14 +1160,18 @@ function renderDirectorLog(list){
     );
     if(i < 0) return;
 
-    const nextArchived = act === "archiveDirector";
-    const actionLabel = nextArchived ? "アーカイブ" : "復帰";
-    list0[i] = {
-      ...list0[i],
-      archived: nextArchived,
-      archivedAt: nextArchived ? Timestamp.now() : null,
-      archivedBy: nextArchived ? who() : null,
-    };
+    if (act === "deleteDirector") {
+      if (!confirm("このFBを消去しますか？")) return;
+      list0.splice(i, 1);
+    } else {
+      const nextArchived = act === "archiveDirector";
+      list0[i] = {
+        ...list0[i],
+        archived: nextArchived,
+        archivedAt: nextArchived ? Timestamp.now() : null,
+        archivedBy: nextArchived ? who() : null,
+      };
+    }
 
     try{
       await updateDoc(doc(db,"projects",currentProjectId,"cues",selectedId), {
@@ -759,7 +1182,8 @@ function renderDirectorLog(list){
       renderDirectorLog(list0);
     }catch(e){
       console.error(e);
-      msg(`${actionLabel}失敗: ${e.code || e.message}`);
+      const label = act === "deleteDirector" ? "消去" : (act === "archiveDirector" ? "アーカイブ" : "復帰");
+      msg(`${label}失敗: ${e.code || e.message}`);
     }
   };
 }
@@ -781,6 +1205,7 @@ function renderCommentLog(list){
   const viewSorted = view
     .sort((a, b) => (a?.at?.seconds || 0) - (b?.at?.seconds || 0));
 
+  const canEdit = canEditComment();
   host.innerHTML = viewSorted
     .map((item, idx) => {
       const by = item.by || "";
@@ -790,17 +1215,28 @@ function renderCommentLog(list){
       const archived = !!item.archived;
       const action = archived ? "restoreComment" : "archiveComment";
       const actionLabel = archived ? "戻す" : "アーカイブ";
+      const actions = canEdit
+        ? `
+          <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
+            <button class="smallBtn danger" type="button" data-act="deleteComment" data-idx="${idx}">消去</button>
+          </div>
+        `
+        : "";
       return `
         <div class="logItem">
           <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
-          <div style="margin-top:8px; display:flex; gap:8px;">
-            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
-          </div>
+          ${actions}
         </div>
       `;
     }).join("");
+
+  if (!canEdit) {
+    host.onclick = null;
+    return;
+  }
 
   host.onclick = async (e)=>{
     const btn = e.target?.closest("button[data-act]");
@@ -823,14 +1259,18 @@ function renderCommentLog(list){
     );
     if(i < 0) return;
 
-    const nextArchived = act === "archiveComment";
-    const actionLabel = nextArchived ? "アーカイブ" : "復帰";
-    list0[i] = {
-      ...list0[i],
-      archived: nextArchived,
-      archivedAt: nextArchived ? Timestamp.now() : null,
-      archivedBy: nextArchived ? who() : null,
-    };
+    if (act === "deleteComment") {
+      if (!confirm("このコメントを消去しますか？")) return;
+      list0.splice(i, 1);
+    } else {
+      const nextArchived = act === "archiveComment";
+      list0[i] = {
+        ...list0[i],
+        archived: nextArchived,
+        archivedAt: nextArchived ? Timestamp.now() : null,
+        archivedBy: nextArchived ? who() : null,
+      };
+    }
 
     try{
       await updateDoc(doc(db,"projects",currentProjectId,"cues",selectedId), {
@@ -841,7 +1281,8 @@ function renderCommentLog(list){
       renderCommentLog(list0);
     }catch(e){
       console.error(e);
-      msg(`${actionLabel}失敗: ${e.code || e.message}`);
+      const label = act === "deleteComment" ? "消去" : (act === "archiveComment" ? "アーカイブ" : "復帰");
+      msg(`${label}失敗: ${e.code || e.message}`);
     }
   };
 }
@@ -895,12 +1336,13 @@ table.on("rowClick", (e, row) => {
 document.addEventListener("mousedown", (e) => {
   const insideGrid = e.target.closest("#grid");
   const insideInspector = e.target.closest("#inspector");
-  if (!insideGrid && !insideInspector) table.deselectRow();
+  const keep = e.target.closest("button, input, select, textarea, a, .cardHead, .modal");
+  if (!insideGrid && !insideInspector && !keep) table.deselectRow();
 });
 
 let moving = false;
 table.on("rowMoved", async () => {
-  if(!currentUser) return;
+  if(!currentUser || !canEditAll()) return;
   if(moving) return;
   moving = true;
   try{
@@ -919,11 +1361,16 @@ function listen(projectId){
   if(unsub) unsub();
   currentProjectId = projectId;
   listenUISettings(projectId);
+  listenScheduleBoard(projectId);
 
   const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
   unsub = onSnapshot(q, (snap) => {
     const rows = [];
-    snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+    snap.forEach(d => {
+      const row = { id: d.id, ...d.data() };
+      row.nextSchedule = scheduleNextMap.get(d.id) || null;
+      rows.push(row);
+    });
     table.replaceData(rows);
     if(pendingSelectId){
       const r = table.getRow(pendingSelectId);
@@ -982,11 +1429,13 @@ onAuthStateChanged(auth, (user) => {
     table.replaceData([]);
     setInspector(null);
   }
+  applyPermissionUI();
 });
 
 // 行追加（失敗時はエラーを表示）
 $("btnAddRow").onclick = async () => {
   if(!currentUser){ msg("ログインしてね"); return; }
+  if(!canEditAll()){ msg("管理者のみ追加できます"); return; }
   try{
     const m = nextMNumber();
     const ref = await addDoc(collection(db,"projects",currentProjectId,"cues"),{
@@ -996,10 +1445,12 @@ $("btnAddRow").onclick = async () => {
       status: "",
       scene: "",
       len: "",
+      reference: "",
       in: "",
       out: "",
       interval: "",
       memo: "",
+      note: "",
       createdAt: serverTimestamp(),
       createdBy: who(),
       updatedAt: serverTimestamp(),
@@ -1031,23 +1482,32 @@ async function renumberM() {
 $("btnDeleteRow")?.addEventListener("click", async (e) => {
   e.preventDefault();
   if(!currentUser){ msg("ログインしてね"); return; }
+  if(!canEditAll()){ msg("管理者のみ削除できます"); return; }
 
-  let id = selectedId;
-  if(!id){
-    const r = table.getSelectedRows?.()[0];
-    id = r?.getData?.()?.id || null;
+  const selectedRows = table.getSelectedRows?.() || [];
+  const ids = selectedRows.map((r) => r.getData?.()?.id).filter(Boolean);
+  if(ids.length === 0 && selectedId) ids.push(selectedId);
+  if(ids.length === 0){ msg("削除する行を選択してね"); return; }
+
+  if(ids.length === 1){
+    const r = table.getRow(ids[0]);
+    const d = r?.getData?.() || {};
+    if(!confirm(`#M ${d.m || ""} を削除する？`)) return;
+  }else{
+    if(!confirm(`選択中の${ids.length}行を削除する？`)) return;
   }
-  if(!id){ msg("削除する行を選択してね"); return; }
-
-  const r = table.getRow(id);
-  const d = r?.getData?.() || {};
-  if(!confirm(`#M ${d.m || ""} を削除する？`)) return;
 
   try{
-    await deleteDoc(doc(db,"projects",currentProjectId,"cues", id));
-    selectedId = null;
-    setInspector(null);
-    msg("削除しました");
+    const b = writeBatch(db);
+    ids.forEach((id) => {
+      b.delete(doc(db,"projects",currentProjectId,"cues", id));
+    });
+    await b.commit();
+    if(selectedId && ids.includes(selectedId)){
+      selectedId = null;
+      setInspector(null);
+    }
+    msg(ids.length > 1 ? `削除しました（${ids.length}行）` : "削除しました");
     setTimeout(()=>msg(""), 900);
   }catch(err){
     console.error(err);
@@ -1065,23 +1525,43 @@ $("btnSaveDetail").onclick = async () => {
   const interval = calcInterval(inTc, outTc, fps);
   $("f_interval").value = interval;
 
-  const patch = {
-    m: $("f_m").value.trim() || null,
-    v: $("f_v").value.trim() || null,
-    demo: $("f_demo").value.trim() || "",
-    scene: $("f_scene").value.trim() || "",
+  const rowData = selectedId ? table.getRow(selectedId)?.getData?.() : {};
+  const mValue = $("f_m") ? $("f_m").value.trim() : (rowData?.m ?? "");
+  const vValue = $("f_v") ? $("f_v").value.trim() : (rowData?.v ?? "");
+  const demoValue = $("f_demo") ? $("f_demo").value.trim() : (rowData?.demo ?? "");
+  const sceneValue = $("f_scene") ? $("f_scene").value.trim() : (rowData?.scene ?? "");
+  const referenceValue = ($("f_reference")?.value || "").trim();
+
+  const fullPatch = {
+    m: mValue || null,
+    v: vValue || null,
+    demo: demoValue || "",
+    scene: sceneValue || "",
     status: $("f_status").value.trim() || "",
     len: $("f_len").value.trim() || "",
     memo: $("f_memo").value || "",
+    note: $("f_note").value || "",
+    reference: referenceValue,
     in: inTc,
     out: outTc,
     interval,
     updatedAt: serverTimestamp(),
     updatedBy: who(),
   };
+  const patch = canEditAll()
+    ? fullPatch
+    : {
+        reference: referenceValue,
+        updatedAt: serverTimestamp(),
+        updatedBy: who(),
+      };
 
   try{
     if(!selectedId){
+      if (!canEditAll()) {
+        msg("ゲストは新規行を作成できません");
+        return;
+      }
       await addDoc(collection(db,"projects",currentProjectId,"cues"),{
         ...patch, createdAt: serverTimestamp(), createdBy: who()
       });
@@ -1098,6 +1578,7 @@ $("btnSaveDetail").onclick = async () => {
 
 $("btnAddDirectorFB")?.addEventListener("click", async ()=>{
   if(!currentUser){ msg("ログインしてね"); return; }
+  if(!canEditDirector()){ msg("ゲストは監督FBと参考曲のみ編集できます"); return; }
   if(!selectedId){ msg("行を選択してね"); return; }
 
   const text = ($("f_director_new")?.value || "").trim();
@@ -1117,19 +1598,25 @@ $("btnAddDirectorFB")?.addEventListener("click", async ()=>{
     archived: false,
   });
 
-  await updateDoc(ref, {
-    directorLog: list,
-    updatedAt: serverTimestamp(),
-    updatedBy: whoName,
-  });
-
-  $("f_director_new").value = "";
-  msg("FBを追加しました");
-  setTimeout(()=>msg(""), 900);
+  try{
+    await updateDoc(ref, {
+      directorLog: list,
+      updatedAt: serverTimestamp(),
+      updatedBy: whoName,
+    });
+    table.updateData([{ id: selectedId, directorLog: list }]);
+    $("f_director_new").value = "";
+    msg("FBを追加しました");
+    setTimeout(()=>msg(""), 900);
+  }catch(e){
+    console.error(e);
+    msg(`FBの追加に失敗: ${e.code || e.message}`);
+  }
 });
 
 $("btnAddComment")?.addEventListener("click", async ()=>{
   if(!currentUser){ msg("ログインしてね"); return; }
+  if(!canEditComment()){ msg("コメントは管理者のみ編集できます"); return; }
   if(!selectedId){ msg("行を選択してね"); return; }
 
   const text = ($("f_comment_new")?.value || "").trim();
@@ -1142,15 +1629,20 @@ $("btnAddComment")?.addEventListener("click", async ()=>{
 
   list.push({ text, at: Timestamp.now(), by: who(), archived: false });
 
-  await updateDoc(ref, {
-    commentLog: list,
-    updatedAt: serverTimestamp(),
-    updatedBy: who(),
-  });
-
-  $("f_comment_new").value = "";
-  msg("コメントを追加しました");
-  setTimeout(()=>msg(""), 900);
+  try{
+    await updateDoc(ref, {
+      commentLog: list,
+      updatedAt: serverTimestamp(),
+      updatedBy: who(),
+    });
+    table.updateData([{ id: selectedId, commentLog: list }]);
+    $("f_comment_new").value = "";
+    msg("コメントを追加しました");
+    setTimeout(()=>msg(""), 900);
+  }catch(e){
+    console.error(e);
+    msg(`コメントの追加に失敗: ${e.code || e.message}`);
+  }
 });
 
 document.getElementById("showDirectorArchived")?.addEventListener("change", () => {
@@ -1237,7 +1729,7 @@ function applyFilters(){
 
     const hay = [
       rowData.scene, rowData.demo, rowData.status, rowData.len,
-      rowData.director, rowData.memo, rowData.in, rowData.out
+      rowData.director, rowData.memo, rowData.reference, rowData.in, rowData.out
     ].join(" ").toLowerCase();
 
     return hay.includes(q);
@@ -1249,6 +1741,7 @@ $("statusFilter")?.addEventListener("change", applyFilters);
 
 $("fpsDefault")?.addEventListener("change", async () => {
   if(!currentUser){ msg("ログインしてね"); return; }
+  if (!canEditAll()) { msg("管理者のみ変更できます"); return; }
   const ref = doc(db, "projects", currentProjectId, "settings", "ui");
   const fps = $("fpsDefault").value;
   window.__FPS_DEFAULT__ = fps;
@@ -1257,20 +1750,26 @@ $("fpsDefault")?.addEventListener("change", async () => {
   setTimeout(()=>msg(""), 900);
 });
 
-// ===== status modal wiring =====
-$("btnStatusConfig")?.addEventListener("click", openStatusModal);
+// ===== settings modal wiring =====
+$("btnSettings")?.addEventListener("click", openStatusModal);
 $("btnCloseStatus")?.addEventListener("click", closeStatusModal);
 $("overlay")?.addEventListener("click", closeStatusModal);
 
 $("btnAddStatus")?.addEventListener("click", () => {
+  if (!canEditAll()) return;
   statuses.push({ value: "new", label: "new", color: "#a78bfa" });
   renderStatusList();
 });
 
 $("btnSaveStatuses")?.addEventListener("click", async () => {
   if(!currentUser){ msg("ログインしてね"); return; }
+  if (!canEditAll()) { msg("管理者のみ変更できます"); return; }
   await saveStatuses();
 });
 
 $("f_status")?.addEventListener("change", updateStatusPreview);
+document.getElementById("f_reference")?.addEventListener("input", () => {
+  renderReferencePreview(document.getElementById("f_reference").value);
+});
+
 

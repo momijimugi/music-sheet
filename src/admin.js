@@ -42,6 +42,7 @@ const scheduleTitle = $("scheduleSelectionTitle");
 const scheduleMeta = $("scheduleSelectionMeta");
 const scheduleDirectorLog = $("scheduleDirectorLog");
 const scheduleCommentLog = $("scheduleCommentLog");
+const scheduleReferencePreview = $("scheduleReferencePreview");
 
 function escapeHtml(s) {
   return String(s || "")
@@ -50,6 +51,98 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function normalizeLabel(s) {
+  return String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function splitScopedTrackId(trackId) {
+  const raw = String(trackId || "");
+  const idx = raw.indexOf("__");
+  if (idx <= 0) return null;
+  const projectId = raw.slice(0, idx).trim();
+  const cueId = raw.slice(idx + 2).trim();
+  if (!projectId || !cueId) return null;
+  return { projectId, cueId };
+}
+
+function buildCueLabel(cue) {
+  const m = (cue?.m ?? "").toString().trim();
+  const scene = (cue?.scene ?? "").toString().trim();
+  const demo = (cue?.demo ?? "").toString().trim();
+  const v = (cue?.v ?? "").toString().trim();
+  const parts = [];
+  if (m) parts.push(`#${m}`);
+  if (scene) parts.push(scene);
+  else if (demo) parts.push(demo);
+  else if (v) parts.push(`v:${v}`);
+  return parts.join(" ").trim();
+}
+
+function extractUrls(text) {
+  const s = String(text || "");
+  const m = s.match(/https?:\/\/[^\s<>"']+/g);
+  return m ? [...new Set(m)] : [];
+}
+
+function youtubeId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname === "youtu.be") return u.pathname.slice(1) || null;
+    if (u.hostname.includes("youtube.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return v;
+      const s = u.pathname.match(/\/shorts\/([^\/]+)/);
+      if (s) return s[1];
+      const e = u.pathname.match(/\/embed\/([^\/]+)/);
+      if (e) return e[1];
+    }
+  } catch {}
+  return null;
+}
+
+function buildReferenceBody(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return `<div class="muted">参考曲はありません</div>`;
+
+  const urls = extractUrls(raw);
+  const ytUrl = urls.find((u) => youtubeId(u));
+  let embed = "";
+  if (ytUrl) {
+    const id = youtubeId(ytUrl);
+    embed = `
+      <div class="referenceEmbed" data-provider="youtube">
+        <iframe src="https://www.youtube.com/embed/${id}" title="YouTube preview" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+      </div>
+    `;
+  }
+
+  const showText = raw && !(urls.length === 1 && raw === urls[0]);
+  const textHtml = showText ? `<div class="muted">${escapeHtml(raw)}</div>` : "";
+  const linksHtml = urls.length
+    ? `<div class="referenceList">${urls
+        .map((u) => {
+          const safe = escapeHtml(u);
+          return `<a class="referenceLink" href="${safe}" target="_blank" rel="noopener">${safe}</a>`;
+        })
+        .join("")}</div>`
+    : "";
+  return `${textHtml}${embed}${linksHtml}`;
+}
+
+function renderScheduleReference(items, emptyText = "参考曲はまだありません") {
+  if (!scheduleReferencePreview) return;
+  if (!items || items.length === 0) {
+    scheduleReferencePreview.innerHTML = `<div class="muted">${emptyText}</div>`;
+    return;
+  }
+  scheduleReferencePreview.innerHTML = items
+    .map((item) => {
+      const label = item.label ? `<div class="muted">${escapeHtml(item.label)}</div>` : "";
+      return `<div class="referenceCard">${label}${buildReferenceBody(item.value)}</div>`;
+    })
+    .join("");
 }
 
 function renderScheduleLog(host, items, emptyText) {
@@ -91,11 +184,99 @@ function flattenLogs(cues, key) {
   return items.slice(0, 12);
 }
 
-async function loadScheduleLogs({ projectId, projectName, trackName } = {}) {
+async function loadScheduleLogs(payload = {}) {
+  let { projectId, projectName, trackId, trackName, cueId } = payload;
+  const scoped = splitScopedTrackId(trackId);
+  if (!projectId && scoped?.projectId) projectId = scoped.projectId;
+  if (!cueId && scoped?.cueId) cueId = scoped.cueId;
   if (!projectId) return;
+  const requestId = ++scheduleSelectionToken;
+  const displayName = trackName || "選択中の曲";
   if (scheduleTitle) {
-    scheduleTitle.textContent = trackName || "選択中の曲";
+    scheduleTitle.textContent = displayName;
   }
+  renderScheduleLog(scheduleDirectorLog, [], "読み込み中...");
+  renderScheduleLog(scheduleCommentLog, [], "読み込み中...");
+  renderScheduleReference([], "読み込み中...");
+
+  let resolvedCueId = cueId || trackId || "";
+  if (resolvedCueId && projectId && resolvedCueId.startsWith(`${projectId}__`)) {
+    resolvedCueId = resolvedCueId.slice(projectId.length + 2);
+  }
+
+  if (resolvedCueId) {
+    const cueSnap = await getDoc(doc(db, "projects", projectId, "cues", resolvedCueId));
+    if (requestId !== scheduleSelectionToken) return;
+    if (cueSnap.exists()) {
+      const cue = { id: resolvedCueId, ...(cueSnap.data() || {}) };
+      const titleParts = [];
+      if (cue.m != null && cue.m !== "") titleParts.push(`#M ${cue.m}`);
+      if (cue.scene) titleParts.push(cue.scene);
+      if (cue.demo) titleParts.push(cue.demo);
+      const titleText = titleParts.join(" / ") || displayName;
+
+      if (scheduleTitle) scheduleTitle.textContent = titleText;
+      if (scheduleMeta) {
+        const parts = [];
+        if (projectName) parts.push(projectName);
+        if (projectId) parts.push(`#${projectId}`);
+        scheduleMeta.textContent = parts.join(" / ");
+      }
+
+      const directorItems = (cue.directorLog || [])
+        .filter((x) => x && !x.archived)
+        .map((x) => ({ ...x, cue }))
+        .sort((a, b) => (b?.at?.seconds || 0) - (a?.at?.seconds || 0));
+      const commentItems = (cue.commentLog || [])
+        .filter((x) => x && !x.archived)
+        .map((x) => ({ ...x, cue }))
+        .sort((a, b) => (b?.at?.seconds || 0) - (a?.at?.seconds || 0));
+
+      renderScheduleLog(scheduleDirectorLog, directorItems, "監督FBはまだありません");
+      renderScheduleLog(scheduleCommentLog, commentItems, "コメントはまだありません");
+      const refValue = (cue.reference || "").trim();
+      if (refValue) {
+        renderScheduleReference([{ value: refValue }]);
+      } else {
+        renderScheduleReference([], "参考曲はまだありません");
+      }
+      return;
+    }
+  }
+
+  const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
+  const snap = await getDocs(q);
+  if (requestId !== scheduleSelectionToken) return;
+  const cues = [];
+  snap.forEach((d) => cues.push({ id: d.id, ...(d.data() || {}) }));
+
+  let filtered = cues;
+  const keywordRaw = String(trackName || "").trim();
+  const keyword = normalizeLabel(keywordRaw);
+  const mMatch = keywordRaw.match(/#\s*(\d+)/);
+  const mFromName = mMatch ? mMatch[1] : null;
+  if (keyword) {
+    const matches = cues.filter((cue) => {
+      const label = normalizeLabel(buildCueLabel(cue));
+      if (label && label === keyword) return true;
+      const hay = [
+        cue.scene,
+        cue.demo,
+        cue.memo,
+        cue.note,
+        cue.v != null ? `v:${cue.v}` : "",
+        cue.m != null ? `#${cue.m}` : "",
+      ]
+        .filter(Boolean)
+        .map((v) => normalizeLabel(v))
+        .join(" ");
+      if (hay.includes(keyword)) return true;
+      if (mFromName && String(cue.m ?? "") === mFromName) return true;
+      return false;
+    });
+    if (matches.length) filtered = matches;
+  }
+
   if (scheduleMeta) {
     const parts = [];
     if (projectName) parts.push(projectName);
@@ -103,29 +284,23 @@ async function loadScheduleLogs({ projectId, projectName, trackName } = {}) {
     if (trackName) parts.push(`曲: ${trackName}`);
     scheduleMeta.textContent = parts.join(" / ");
   }
-  renderScheduleLog(scheduleDirectorLog, [], "読み込み中...");
-  renderScheduleLog(scheduleCommentLog, [], "読み込み中...");
-
-  const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
-  const snap = await getDocs(q);
-  const cues = [];
-  snap.forEach((d) => cues.push({ id: d.id, ...(d.data() || {}) }));
-
-  let filtered = cues;
-  const keyword = String(trackName || "").trim().toLowerCase();
-  if (keyword) {
-    const matches = cues.filter((cue) =>
-      [cue.scene, cue.demo, cue.memo, cue.note]
-        .filter(Boolean)
-        .some((v) => String(v).toLowerCase().includes(keyword))
-    );
-    if (matches.length) filtered = matches;
-  }
 
   const directorItems = flattenLogs(filtered, "directorLog");
   const commentItems = flattenLogs(filtered, "commentLog");
   renderScheduleLog(scheduleDirectorLog, directorItems, "監督FBはまだありません");
   renderScheduleLog(scheduleCommentLog, commentItems, "コメントはまだありません");
+
+  const referenceItems = filtered
+    .map((cue) => ({
+      label: buildCueLabel(cue) || cue.id,
+      value: cue.reference || "",
+    }))
+    .filter((item) => String(item.value || "").trim());
+  if (referenceItems.length) {
+    renderScheduleReference(referenceItems);
+  } else {
+    renderScheduleReference([], "参考曲はまだありません");
+  }
 }
 
 function normEmail(s) {
@@ -142,12 +317,14 @@ let currentUser = null;
 let initDone = false;
 let memberUnsub = null;
 let currentMemberProjectId = "";
+let scheduleSelectionToken = 0;
 
 mountNav({ current: "admin" });
 mountThemeToggle();
 window.addEventListener("themechange", () => setScheduleFrameAll());
 renderScheduleLog(scheduleDirectorLog, [], "曲名をクリックすると表示されます");
 renderScheduleLog(scheduleCommentLog, [], "曲名をクリックすると表示されます");
+renderScheduleReference([], "曲名をクリックすると表示されます");
 
 window.addEventListener("message", (event) => {
   const data = event.data;
@@ -156,6 +333,7 @@ window.addEventListener("message", (event) => {
     console.error(err);
     renderScheduleLog(scheduleDirectorLog, [], "読み込みに失敗しました");
     renderScheduleLog(scheduleCommentLog, [], "読み込みに失敗しました");
+    renderScheduleReference([], "読み込みに失敗しました");
   });
 });
 

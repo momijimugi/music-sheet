@@ -27,7 +27,7 @@
       --transition-med: 0.25s ease-out;
       --cell-height: 28px;
       --cell-width: 70px;
-      --row-header-width: 240px;
+      --row-header-width: 280px;
       --group-row-height: calc(var(--cell-height) + 12px);
       --project-group-offset: 0px;
       --grid-header-height: 0px;
@@ -735,9 +735,10 @@
 
     .row-header-inner {
       padding: 4px 6px 4px 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
     }
 
     .row-header-top {
@@ -745,13 +746,40 @@
       align-items: center;
       justify-content: space-between;
       gap: 6px;
+      min-width: 0;
+    }
+    .row-header-main {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .row-header-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+      min-width: 90px;
+    }
+    .row-meta-pill {
+      font-size: 0.62rem;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(111,214,255,0.45);
+      background: rgba(111,214,255,0.16);
+      color: var(--text-main);
     }
 
     .row-header-title {
+      flex: 1 1 auto;
+      min-width: 0;
       color: var(--text-main);
       font-weight: 500;
       font-size: 0.8rem;
       cursor: pointer;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .row-header-title:hover {
       text-decoration: underline;
@@ -1870,6 +1898,19 @@
     })();
 
     let currentUser = null;
+    let sheetUiUnsub = null;
+    let allCuesUnsub = null;
+    let allSheetUiUnsubs = new Map();
+    let sheetStatusMap = new Map();
+    const sheetStatusByProject = new Map();
+    let sheetTrackMetaById = new Map();
+    const SHEET_LEN_OPTIONS = [
+      { value: "very_long", label: "very long", color: "#ef4444" },
+      { value: "long", label: "long", color: "#f97316" },
+      { value: "mid", label: "mid", color: "#60a5fa" },
+      { value: "short", label: "short", color: "#34d399" },
+    ];
+    const sheetLenMap = new Map(SHEET_LEN_OPTIONS.map((x) => [x.value, x]));
 
     // ===== Music Sheet（cues）から曲リストをリアルタイム同期 =====
     let cuesUnsub = null;
@@ -1888,11 +1929,30 @@
         cuesUnsub = null;
       }
     }
+    function stopSheetUi(){
+      if (sheetUiUnsub) {
+        sheetUiUnsub();
+        sheetUiUnsub = null;
+      }
+      sheetStatusMap = new Map();
+    }
     function stopAllBoards(){
       if (allBoardsUnsub) {
         allBoardsUnsub();
         allBoardsUnsub = null;
       }
+    }
+    function stopAllSheetMeta(){
+      if (allCuesUnsub) {
+        allCuesUnsub();
+        allCuesUnsub = null;
+      }
+      if (allSheetUiUnsubs.size) {
+        allSheetUiUnsubs.forEach((unsub) => unsub && unsub());
+        allSheetUiUnsubs.clear();
+      }
+      sheetTrackMetaById = new Map();
+      sheetStatusByProject.clear();
     }
 
     let remoteUnsub = null;
@@ -2078,6 +2138,8 @@
     async function startAllMode(){
       stopCues();
       stopAllBoards();
+      stopSheetUi();
+      stopAllSheetMeta();
       if (remoteUnsub) {
         remoteUnsub();
         remoteUnsub = null;
@@ -2107,6 +2169,7 @@
           const data = d.data() || {};
           allProjectNameMap.set(d.id, data.name || d.id);
         });
+        startAllSheetSettingsListener(Array.from(allProjectNameMap.keys()));
         if (allBoardsCache.length) renderAllBoards();
       }, (err)=>{
         console.error(err);
@@ -2132,6 +2195,8 @@
         console.error(err);
         showTopError(`全案件の読み込みエラー: ${err.code || err.message}`);
       });
+      startAllCuesListener();
+      startAllSheetSettingsListener();
     }
 
     let state = loadStateOrInit();
@@ -2139,6 +2204,7 @@
     // ===== portal連携（案件はprojects/{id}に固定）=====
     async function startProjectMode(projectId){
       stopCues();
+      stopAllSheetMeta();
 
       if (projectId) {
         PROJECT_ID = projectId;
@@ -2217,7 +2283,10 @@
 
         // リアルタイム同期（同じ案件を開いている他の人にも反映）
         if (currentUser) startRemoteListener();
-        if (currentUser) startCuesListener();
+        if (currentUser) {
+          startSheetSettingsListener(PROJECT_ID);
+          startCuesListener();
+        }
       }
 
       ensureSettingsObject();
@@ -2517,6 +2586,76 @@
       return parts.join(' ') || (id ? `cue:${id.slice(0, 6)}` : 'cue');
     }
 
+    function buildSheetStatusMap(list) {
+      const map = new Map();
+      if (!Array.isArray(list)) return map;
+      list.forEach((st) => {
+        if (!st || !st.value) return;
+        map.set(st.value, {
+          label: st.label || st.value,
+          color: st.color || '#6fd6ff',
+        });
+      });
+      return map;
+    }
+
+    function getSheetStatusInfo(projectId, value) {
+      if (!value) return null;
+      const map = IS_ALL_SCOPE ? sheetStatusByProject.get(projectId) : sheetStatusMap;
+      if (map && map.has(value)) return map.get(value);
+      return { label: value, color: '#6fd6ff' };
+    }
+
+    function getSheetLenInfo(value) {
+      if (!value) return null;
+      if (sheetLenMap.has(value)) return sheetLenMap.get(value);
+      return { label: value, color: '#6fd6ff' };
+    }
+
+    function getPillColors(color) {
+      const c = String(color || '').trim();
+      const isHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
+      if (!isHex) {
+        return { bg: 'rgba(111,214,255,0.18)', bd: 'rgba(111,214,255,0.55)' };
+      }
+      return { bg: c + '22', bd: c + '55' };
+    }
+
+    function renderMetaPill(label, color) {
+      const colors = getPillColors(color);
+      return `<span class="row-meta-pill" style="background:${colors.bg};border-color:${colors.bd};">${escapeHtml(label)}</span>`;
+    }
+
+    function resolveTrackMeta(track, projectId) {
+      let status = track?.status || '';
+      let len = track?.len || '';
+      let pid = projectId || '';
+      if ((!status && !len) && sheetTrackMetaById.has(track.id)) {
+        const meta = sheetTrackMetaById.get(track.id);
+        status = status || meta.status || '';
+        len = len || meta.len || '';
+        pid = pid || meta.projectId || '';
+      }
+      return { status, len, projectId: pid };
+    }
+
+    function renderTrackMetaRow(track, projectId) {
+      const meta = resolveTrackMeta(track, projectId);
+      const pills = [];
+      if (meta.status) {
+        const st = getSheetStatusInfo(meta.projectId, meta.status);
+        const label = st?.label || meta.status;
+        pills.push(renderMetaPill(`進捗: ${label}`, st?.color));
+      }
+      if (meta.len) {
+        const ln = getSheetLenInfo(meta.len);
+        const label = ln?.label || meta.len;
+        pills.push(renderMetaPill(`長さ: ${label}`, ln?.color));
+      }
+      if (!pills.length) return `<div class="row-header-meta row-header-meta-empty"></div>`;
+      return `<div class="row-header-meta">${pills.join('')}</div>`;
+    }
+
     function syncTracksFromCues(trackList) {
       if (!PROJECT_ID) return;
       if (!state?.projects) state.projects = [];
@@ -2531,7 +2670,9 @@
       proj.tracks = trackList.map(t => ({
         id: t.id,
         name: t.name,
-        memo: prevMemos.get(t.id) || ''
+        memo: prevMemos.get(t.id) || '',
+        status: t.status || '',
+        len: t.len || ''
       }));
 
       // scheduleのキーを曲リストに合わせて整形
@@ -2549,6 +2690,69 @@
       });
     }
 
+    function startSheetSettingsListener(projectId){
+      stopSheetUi();
+      if (!projectId) return;
+      const ref = doc(db, 'projects', projectId, 'settings', 'ui');
+      sheetUiUnsub = onSnapshot(ref, (snap) => {
+        const data = snap.exists() ? (snap.data() || {}) : {};
+        sheetStatusMap = buildSheetStatusMap(data.statuses || []);
+        renderAll();
+      }, (err) => {
+        console.warn('[schedule] sheet ui settings error', err);
+      });
+    }
+
+    function startAllSheetSettingsListener(projectIds){
+      const ids = Array.isArray(projectIds) ? projectIds : Array.from(allProjectNameMap.keys());
+      const next = new Set(ids.filter(Boolean));
+
+      allSheetUiUnsubs.forEach((unsub, pid) => {
+        if (!next.has(pid)) {
+          if (unsub) unsub();
+          allSheetUiUnsubs.delete(pid);
+          sheetStatusByProject.delete(pid);
+        }
+      });
+
+      ids.forEach((pid) => {
+        if (!pid || allSheetUiUnsubs.has(pid)) return;
+        const ref = doc(db, 'projects', pid, 'settings', 'ui');
+        const unsub = onSnapshot(ref, (snap) => {
+          const data = snap.exists() ? (snap.data() || {}) : {};
+          sheetStatusByProject.set(pid, buildSheetStatusMap(data.statuses || []));
+          renderAll();
+        }, (err) => {
+          console.warn('[schedule] sheet ui settings(all) error', err);
+        });
+        allSheetUiUnsubs.set(pid, unsub);
+      });
+    }
+
+    function startAllCuesListener(){
+      if (allCuesUnsub) {
+        allCuesUnsub();
+        allCuesUnsub = null;
+      }
+      sheetTrackMetaById = new Map();
+      allCuesUnsub = onSnapshot(collectionGroup(db, 'cues'), (snap) => {
+        const next = new Map();
+        snap.forEach((d) => {
+          const pid = projectIdFromPath(d.ref.path);
+          if (!pid) return;
+          const data = d.data() || {};
+          const status = data.status || '';
+          const len = data.len || '';
+          if (!status && !len) return;
+          next.set(makeScopedTrackId(pid, d.id), { status, len, projectId: pid });
+        });
+        sheetTrackMetaById = next;
+        renderAll();
+      }, (err) => {
+        console.warn('[schedule] cues(all) error', err);
+      });
+    }
+
     function startCuesListener() {
       if (!PROJECT_ID || !currentUser) return;
       if (cuesUnsub) cuesUnsub();
@@ -2563,7 +2767,9 @@
           return {
             id: d.id,
             name: buildTrackLabelFromCue(data, d.id),
-            m: (data?.m ?? null)
+            m: (data?.m ?? null),
+            status: data?.status || '',
+            len: data?.len || ''
           };
         });
 
@@ -2579,7 +2785,7 @@
           return a.name.localeCompare(b.name, 'ja');
         });
 
-        lastCueTracks = list.map(({ id, name }) => ({ id, name }));
+        lastCueTracks = list.map(({ id, name, status, len }) => ({ id, name, status, len }));
         syncTracksFromCues(lastCueTracks);
         renderAll();
       }, (err) => {
@@ -3213,49 +3419,33 @@ function scheduleRemoteSave() {
         group.tracks.forEach(track => {
           const rowIndex = trackIdToRowIndex[track.id];
           const trackSchedule = state.schedule[track.id] || {};
+          const metaHtml = renderTrackMetaRow(track, project.id);
 
           // 左: 行ヘッダー
           leftBody += `
             <tr>
               <td class="row-header-cell">
                 <div class="row-header-inner">
-                  <div class="row-header-top">
-                    <div class="row-header-title"
-                         data-project-id="${project.id}"
-                         data-track-id="${track.id}"
-                         data-track-name="${escapeHtml(track.name)}"
-                         data-project-name="${escapeHtml(project.name)}">${escapeHtml(track.name)}</div>
-                    <div class="row-header-actions">
-                      <button type="button"
-                              class="btn btn-ghost btn-sm btn-icon-only row-header-memo-btn"
-                              data-project-id="${project.id}"
-                              data-track-id="${track.id}"
-                              title="${escapeHtml(track.memo || 'メモ未設定')}">
-                        📝
-                      </button>
-                      <button type="button"
-                              class="btn btn-ghost btn-sm btn-icon-only row-move-up-btn"
-                              data-project-id="${project.id}"
-                              data-track-id="${track.id}"
-                              title="上へ">
-                        ▲
-                      </button>
-                      <button type="button"
-                              class="btn btn-ghost btn-sm btn-icon-only row-move-down-btn"
-                              data-project-id="${project.id}"
-                              data-track-id="${track.id}"
-                              title="下へ">
-                        ▼
-                      </button>
-                      <button type="button"
-                              class="btn btn-ghost btn-sm btn-icon-only row-delete-btn"
-                              data-track-id="${track.id}"
-                              title="この曲を削除">
-                        🗑
-                      </button>
+                  <div class="row-header-main">
+                    <div class="row-header-top">
+                      <div class="row-header-title"
+                           data-project-id="${project.id}"
+                           data-track-id="${track.id}"
+                           data-track-name="${escapeHtml(track.name)}"
+                           data-project-name="${escapeHtml(project.name)}">${escapeHtml(track.name)}</div>
+                      <div class="row-header-actions">
+                        <button type="button"
+                                class="btn btn-ghost btn-sm btn-icon-only row-header-memo-btn"
+                                data-project-id="${project.id}"
+                                data-track-id="${track.id}"
+                                title="${escapeHtml(track.memo || 'メモ未設定')}">
+                          📝
+                        </button>
+                      </div>
                     </div>
+                    <div class="row-header-tag">${escapeHtml(project.name)}</div>
                   </div>
-                  <div class="row-header-tag">${escapeHtml(project.name)}</div>
+                  ${metaHtml}
                 </div>
               </td>
             </tr>
@@ -3540,10 +3730,17 @@ function scheduleRemoteSave() {
         title.addEventListener('click', (ev) => {
           if (!IS_EMBED) return;
           ev.stopPropagation();
+          const projectId = title.dataset.projectId || '';
+          const trackId = title.dataset.trackId || '';
+          let cueId = trackId;
+          if (projectId && cueId.startsWith(`${projectId}__`)) {
+            cueId = cueId.slice(projectId.length + 2);
+          }
           const payload = {
             type: 'SCHEDULE_TRACK_SELECT',
-            projectId: title.dataset.projectId || '',
-            trackId: title.dataset.trackId || '',
+            projectId,
+            trackId,
+            cueId,
             trackName: title.dataset.trackName || title.textContent || '',
             projectName: title.dataset.projectName || '',
           };
@@ -3554,35 +3751,6 @@ function scheduleRemoteSave() {
       });
 
       // 曲削除
-      document.querySelectorAll('.row-delete-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const trackId = btn.dataset.trackId;
-          const rowData = currentRows.find(r => r.track.id === trackId);
-          if (!rowData) return;
-
-          const { project, track } = rowData;
-          const ok = window.confirm(
-            `曲「${track.name}」を削除しますか？\n（この曲のスケジュールもすべて削除されます）`
-          );
-          if (!ok) return;
-
-          pushUndo();
-
-          const proj = state.projects.find(p => p.id === project.id);
-          if (proj) {
-            proj.tracks = (proj.tracks || []).filter(t => t.id !== trackId);
-          }
-          if (state.schedule[trackId]) {
-            delete state.schedule[trackId];
-          }
-
-          saveState();
-          selectedCells.clear();
-          lastFocusedCell = null;
-          clipboardData = null;
-          renderAll();
-        });
-      });
 
       // 🔴 案件の締切設定ボタン
       document.querySelectorAll('.project-deadline-btn').forEach(btn => {
@@ -3618,21 +3786,6 @@ function scheduleRemoteSave() {
       });
 
       // 曲の並び替え（案件内で上下）
-      document.querySelectorAll('.row-move-up-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const projectId = btn.dataset.projectId;
-          const trackId = btn.dataset.trackId;
-          moveTrack(projectId, trackId, -1);
-        });
-      });
-
-      document.querySelectorAll('.row-move-down-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const projectId = btn.dataset.projectId;
-          const trackId = btn.dataset.trackId;
-          moveTrack(projectId, trackId, 1);
-        });
-      });
     }
 
     function attachProjectGroupEvents() {

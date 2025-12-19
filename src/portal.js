@@ -22,6 +22,7 @@ function isAdminUser(u){
   return !!u?.email && ADMIN_EMAILS.includes(u.email);
 }
 const enc = encodeURIComponent(project);
+const editor = $("meetingEditor");
 
 $("toSheet").href = `${base}sheet.html?project=${encodeURIComponent(project)}`;
 document.querySelector('a[href="/admin.html"]')?.setAttribute("href", `${base}admin.html`);
@@ -54,11 +55,29 @@ const dropboxAdmin = document.getElementById("dropboxAdmin");
 if (dropboxAdmin) dropboxAdmin.style.display = isAdmin ? "flex" : "none";
 const referenceAdmin = document.getElementById("referenceAdmin");
 if (referenceAdmin) referenceAdmin.style.display = isAdmin ? "flex" : "none";
+const pdfAdmin = document.getElementById("pdfAdmin");
+if (pdfAdmin) pdfAdmin.style.display = isAdmin ? "flex" : "none";
 const referenceMsg = (t) => {
   const el = document.getElementById("referenceMsg");
   if (el) el.textContent = t || "";
 };
 let referenceLinks = [];
+const pdfMsg = (t) => {
+  const el = document.getElementById("pdfMsg");
+  if (el) el.textContent = t || "";
+};
+
+const editorWrap = document.querySelector(".portalEditor");
+const editorControls = document.querySelectorAll(".toolbar button");
+const meetingTitle = document.getElementById("meetingTitle");
+if (!isAdmin) {
+  editor?.setAttribute("contenteditable", "false");
+  editorControls.forEach((btn) => (btn.disabled = true));
+  meetingTitle && (meetingTitle.disabled = true);
+  document.getElementById("btnSave")?.setAttribute("disabled", "true");
+  document.getElementById("btnMeetingClear")?.setAttribute("disabled", "true");
+  editorWrap?.classList.add("readOnly");
+}
 
 const pSnap = await getDoc(projectRef);
 if (pSnap.exists()) {
@@ -73,11 +92,11 @@ if (pSnap.exists()) {
   $("pTitle").textContent = project;
 }
 
-const editor = $("meetingEditor");
 
 onSnapshot(portalRef, (snap)=>{
   const d = snap.exists() ? snap.data() : {};
   const link = (d?.dropboxLink || "").trim();
+  const pdfLink = (d?.schedulePdfLink || "").trim();
   referenceLinks = Array.isArray(d?.referenceLinks)
     ? d.referenceLinks.filter((v) => typeof v === "string" && v.trim())
     : [];
@@ -100,6 +119,7 @@ onSnapshot(portalRef, (snap)=>{
   }
 
   renderReferences(referenceLinks);
+  setPdfView(pdfLink);
 });
 
 document.getElementById("btnSaveDropbox")?.addEventListener("click", async ()=>{
@@ -115,6 +135,33 @@ document.getElementById("btnClearDropbox")?.addEventListener("click", async ()=>
   await setDoc(portalRef, { dropboxLink: "" , updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
   msg("Dropboxリンクをクリアしました");
   setTimeout(()=>msg(""), 1000);
+});
+
+document.getElementById("btnSavePdf")?.addEventListener("click", async ()=>{
+  if(!isAdmin){ pdfMsg("管理者のみ設定できます"); return; }
+  const raw = (document.getElementById("pdfUrl")?.value || "").trim();
+  const url = normalizeReferenceUrl(raw);
+  if (!url) {
+    pdfMsg("リンクの形式を確認してください");
+    return;
+  }
+  await setDoc(portalRef, { schedulePdfLink: url, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  pdfMsg("PDFリンクを保存しました");
+  setTimeout(()=>pdfMsg(""), 1200);
+});
+
+document.getElementById("btnClearPdf")?.addEventListener("click", async ()=>{
+  if(!isAdmin){ pdfMsg("管理者のみ設定できます"); return; }
+  await setDoc(portalRef, { schedulePdfLink: "" , updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  pdfMsg("PDFリンクをクリアしました");
+  setTimeout(()=>pdfMsg(""), 1200);
+});
+
+document.getElementById("pdfUrl")?.addEventListener("keydown", (e)=>{
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("btnSavePdf")?.click();
+  }
 });
 
 document.getElementById("btnAddReference")?.addEventListener("click", async ()=>{
@@ -144,6 +191,10 @@ document.getElementById("referenceInput")?.addEventListener("keydown", (e)=>{
 document.querySelectorAll(".tb[data-cmd]").forEach(btn=>{
   btn.addEventListener("click", (e)=>{
     e.preventDefault();
+    if (!isAdmin) {
+      msg("ゲストは閲覧のみです");
+      return;
+    }
     const cmd = btn.dataset.cmd;
     // execCommandは古いけど、軽量で今でも十分動く
     document.execCommand(cmd, false, null);
@@ -153,6 +204,10 @@ document.querySelectorAll(".tb[data-cmd]").forEach(btn=>{
 
 $("btnMeetingClear").addEventListener("click", (e)=>{
   e.preventDefault();
+  if (!isAdmin) {
+    msg("ゲストは閲覧のみです");
+    return;
+  }
   if(confirm("メモを全消去する？")) editor.innerHTML = "";
 });
 
@@ -213,6 +268,55 @@ function normalizeReferenceUrl(raw){
   }
 }
 
+function getPdfEmbedUrl(url){
+  try{
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    if (host.includes("drive.google.com")) {
+      let id = "";
+      const match = u.pathname.match(/\/file\/d\/([^\/]+)/);
+      if (match) id = match[1];
+      if (!id) id = u.searchParams.get("id") || "";
+      if (id) return `https://drive.google.com/file/d/${id}/preview`;
+    }
+    if (host.includes("dropbox.com")) {
+      u.searchParams.delete("dl");
+      u.searchParams.set("raw", "1");
+      return u.toString();
+    }
+  }catch{
+    return "";
+  }
+  return url;
+}
+
+function setPdfView(link){
+  const openLink = document.getElementById("pdfOpen");
+  const unset = document.getElementById("pdfUnset");
+  const viewer = document.getElementById("pdfViewer");
+  const input = document.getElementById("pdfUrl");
+
+  if (!link) {
+    if (openLink) openLink.style.display = "none";
+    if (unset) unset.style.display = "block";
+    if (viewer) viewer.style.display = "none";
+    if (isAdmin && input) input.value = "";
+    return;
+  }
+
+  if (openLink) {
+    openLink.style.display = "inline-flex";
+    openLink.href = link;
+  }
+  if (unset) unset.style.display = "none";
+  if (viewer) {
+    const embed = getPdfEmbedUrl(link) || link;
+    viewer.style.display = "block";
+    viewer.innerHTML = `<iframe class="pdfFrame" src="${embed}" loading="lazy" title="Schedule PDF"></iframe>`;
+  }
+  if (isAdmin && input) input.value = link;
+}
+
 function getReferenceEmbed(url){
   const id = youtubeId(url);
   if (id) {
@@ -258,32 +362,47 @@ function renderReferences(list){
     const embed = getReferenceEmbed(url);
     const label = embed?.label || "リンク";
     const safeUrl = escapeHtml(url);
-    const embedHtml = embed
-      ? `
-        <div class="referenceEmbed" data-provider="${embed.provider}">
-          <iframe src="${embed.embedUrl}" loading="lazy" allow="autoplay *; encrypted-media *; clipboard-write" allowfullscreen></iframe>
-        </div>
-      `
-      : "";
     const actions = isAdmin
       ? `<button class="smallBtn ghost" type="button" data-act="removeReference" data-idx="${idx}">削除</button>`
       : "";
-    return `
-      <div class="referenceCard">
-        <div class="referenceHeader">
-          <span class="tagPill">${label}</span>
-          ${actions}
+    const embedHtml = embed
+      ? `
+        <div class="referenceEmbed" data-provider="${embed.provider}">
+          <iframe data-src="${embed.embedUrl}" loading="lazy" allow="autoplay *; encrypted-media *; clipboard-write" allowfullscreen></iframe>
         </div>
-        ${embedHtml}
-        <a class="referenceLink" href="${safeUrl}" target="_blank" rel="noopener">${safeUrl}</a>
-      </div>
+      `
+      : "";
+    return `
+      <details class="referenceItem">
+        <summary>
+          <span class="referenceTitle"><span class="tagPill">${label}</span>${safeUrl}</span>
+          <span class="referenceActions">${actions}</span>
+        </summary>
+        <div class="referenceBody">
+          ${embedHtml}
+          <a class="referenceLink" href="${safeUrl}" target="_blank" rel="noopener">${safeUrl}</a>
+        </div>
+      </details>
     `;
   }).join("");
+
+  host.querySelectorAll("details.referenceItem").forEach((details) => {
+    const iframe = details.querySelector("iframe[data-src]");
+    if (!iframe) return;
+    const onToggle = () => {
+      if (details.open && !iframe.src) {
+        iframe.src = iframe.dataset.src || "";
+      }
+    };
+    details.addEventListener("toggle", onToggle);
+  });
 
   host.onclick = async (e) => {
     const btn = e.target?.closest("button[data-act='removeReference']");
     if (!btn) return;
     if (!isAdmin) return;
+    e.preventDefault();
+    e.stopPropagation();
     const idx = Number(btn.dataset.idx);
     if (Number.isNaN(idx)) return;
     const next = referenceLinks.filter((_, i) => i !== idx);
@@ -323,9 +442,7 @@ function buildPreviews(html){
 }
 
 function canManageLog(user, d){
-  const isAdmin = isAdminUser(user);
-  const isOwner = d.createdBy && user?.email && d.createdBy === user.email;
-  return isAdmin || isOwner;
+  return isAdminUser(user);
 }
 
 function renderLogItem(d){
@@ -417,6 +534,7 @@ document.getElementById("showArchived")?.addEventListener("change", () => {
 // 保存
 $("btnSave").addEventListener("click", async ()=>{
   if(!me){ msg("ログインしてね"); return; }
+  if(!isAdmin){ msg("ゲストは閲覧のみです"); return; }
   const titleEl = document.getElementById("meetingTitle");
   const title = (titleEl?.value || "").trim() || "打ち合わせメモ";
   const html = editor.innerHTML || "";
@@ -437,6 +555,7 @@ $("btnSave").addEventListener("click", async ()=>{
 
 document.getElementById("btnArchiveLatest")?.addEventListener("click", async ()=>{
   if(!me){ msg("ログインしてね"); return; }
+  if(!isAdmin){ msg("管理者のみ操作できます"); return; }
   if(!latestId || !latestDocCache){ msg("対象ログがありません"); return; }
   if(!confirm("最新ログをアーカイブする？（通常表示から外れます）")) return;
 
@@ -457,6 +576,7 @@ document.getElementById("btnArchiveLatest")?.addEventListener("click", async ()=
 
 document.getElementById("btnDeleteLatest")?.addEventListener("click", async ()=>{
   if(!me){ msg("ログインしてね"); return; }
+  if(!isAdmin){ msg("管理者のみ操作できます"); return; }
   if(!latestId || !latestDocCache){ msg("対象ログがありません"); return; }
 
   const ok1 = confirm("最新ログを消去します。よろしいですか？（元に戻せません）");

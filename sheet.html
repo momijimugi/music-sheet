@@ -31,18 +31,12 @@
           <select id="statusFilter" class="select">
             <option value="">進捗：すべて</option>
           </select>
-          <select id="fpsDefault" class="select" title="フレームレート（このシート共通）">
-            <option value="24">24</option>
-            <option value="25">25</option>
-            <option value="30">30</option>
-          </select>
           <span class="msg" id="msg"></span>
         </div>
 
         <div class="right">
           <button id="btnToggleInspector" class="ghost" type="button">詳細を開く</button>
-          <button id="btnStatusConfig" class="ghost" type="button">進捗設定</button>
-          <button id="btnBulk" type="button" class="ghost">一括編集: OFF</button>
+          <button id="btnSettings" class="ghost" type="button">設定</button>
           <button id="btnUndo" type="button" class="ghost">Undo</button>
           <button id="btnAddRow" type="button">＋行を追加</button>
           <button id="btnDeleteRow" type="button" class="ghost">- 行を削除</button>
@@ -65,50 +59,60 @@
         <div class="row2">
           <div>
             <label>監督FB（履歴）</label>
-            <label class="muted portalToggle">
-              <input id="showDirectorArchived" type="checkbox">
-              アーカイブも表示
-            </label>
+            <div class="insToggleRow">
+              <span class="toggleLabel muted">アーカイブも表示</span>
+              <label class="portalToggle">
+                <input id="showDirectorArchived" type="checkbox">
+              </label>
+            </div>
             <div id="directorLog" class="logBox"></div>
 
             <label>新しいFBを追加<textarea id="f_director_new"></textarea></label>
-            <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
+            <div class="insActions">
+              <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
+            </div>
           </div>
         </div>
 
         <div class="row2">
           <div>
             <label>コメント（履歴）</label>
-            <label class="muted portalToggle">
-              <input id="showCommentArchived" type="checkbox">
-              アーカイブも表示
-            </label>
+            <div class="insToggleRow">
+              <span class="toggleLabel muted">アーカイブも表示</span>
+              <label class="portalToggle">
+                <input id="showCommentArchived" type="checkbox">
+              </label>
+            </div>
             <div id="commentLog" class="logBox"></div>
 
             <label>新しいコメントを追加<textarea id="f_comment_new"></textarea></label>
-            <button id="btnAddComment" type="button">コメントを追加</button>
+            <div class="insActions">
+              <button id="btnAddComment" type="button">コメントを追加</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>参考曲 <input id="f_reference" placeholder="YouTube / Spotify などのリンク" /></label>
+            <div id="referencePreview" class="referencePreview"></div>
           </div>
         </div>
 
         <div class="row2">
           <label>コメント（memo）<textarea id="f_memo"></textarea></label>
         </div>
-
-        <div class="row4">
-          <label>#M <input id="f_m" /></label>
-          <label>V <input id="f_v" /></label>
-          <label>demo <input id="f_demo" /></label>
+        <div class="row2">
+          <label>長さ <select id="f_len" class="select"></select></label>
           <label>進捗
             <div class="tagSelectWrap">
               <select id="f_status" class="select"></select>
-              <span id="statusTagPreview" class="tagPill">—</span>
+              <span id="statusTagPreview" class="tagPill">?</span>
             </div>
           </label>
         </div>
 
-        <div class="row3">
-          <label>scene <input id="f_scene" /></label>
-          <label>長さ <select id="f_len" class="select"></select></label>
+        <div class="row2">
           <label>更新メモ（任意） <input id="f_note" /></label>
         </div>
 
@@ -118,23 +122,51 @@
           <label>INTERVAL <input id="f_interval" disabled /></label>
         </div>
 
-        <button id="btnSaveDetail" type="button">詳細を保存</button>
+        <div class="insActions">
+          <button id="btnSaveDetail" type="button">詳細を保存</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 進捗設定モーダル -->
+  <!-- 設定モーダル -->
   <div id="overlay" class="overlay hidden"></div>
   <div id="statusModal" class="modal hidden">
     <div class="modalHead">
-      <div class="modalTitle">進捗設定</div>
+      <div class="modalTitle">設定</div>
       <button id="btnCloseStatus" class="ghost" type="button">閉じる</button>
     </div>
     <div class="modalBody">
-      <div id="statusList" class="statusList"></div>
-      <div class="modalActions">
-        <button id="btnAddStatus" type="button">＋追加</button>
-        <button id="btnSaveStatuses" type="button">保存</button>
+      <div class="settingsGrid">
+        <section class="settingsSection">
+          <div class="settingsTitle">基本設定</div>
+          <label class="toggleRow portalToggle">
+            <input id="toggleBulk" type="checkbox">
+            <span>一括編集</span>
+            <span id="bulkState" class="muted">OFF</span>
+          </label>
+          <label class="toggleRow portalToggle">
+            <input id="toggleGuest" type="checkbox">
+            <span>デバッグ用ゲストモード</span>
+            <span id="guestState" class="muted"></span>
+          </label>
+          <label>フレームレート
+            <select id="fpsDefault" class="select" title="フレームレート（このシート共通）">
+              <option value="24">24</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+            </select>
+          </label>
+          <div class="muted settingsNote">※ゲストは変更できません</div>
+        </section>
+        <section class="settingsSection">
+          <div class="settingsTitle">進捗設定</div>
+          <div id="statusList" class="statusList"></div>
+          <div class="modalActions">
+            <button id="btnAddStatus" type="button">＋追加</button>
+            <button id="btnSaveStatuses" type="button">保存</button>
+          </div>
+        </section>
       </div>
     </div>
   </div>
@@ -143,3 +175,6 @@
   <script type="module" src="/src/sheet.js"></script>
 </body>
 </html>
+
+
+

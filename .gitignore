@@ -14,6 +14,7 @@ dist-ssr
 .env.local
 .vite
 .env
+Music sheet.txt
 
 # Editor directories and files
 .vscode/*

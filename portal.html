@@ -63,6 +63,10 @@
             <span id="referenceMsg" class="muted"></span>
           </div>
         </div>
+      </section>
+
+      <section class="portalCol">
+        
 
         <!-- ★ 打ち合わせメモ（Notion風トグル） -->
         <div class="card pad portalEditor">
@@ -96,9 +100,7 @@
             </div>
           </details>
         </div>
-      </section>
 
-      <section class="portalCol">
         <div class="card pad portalLatest">
           <div class="card-head">
             <div>
@@ -137,6 +139,21 @@
 
         <iframe id="scheduleFrame" class="schedule-frame" src="about:blank" loading="lazy"></iframe>
       </section>
+
+      <section class="card pad portalPdf">
+        <div class="card-head">
+          <h2>スケジュールPDF</h2>
+          <a id="pdfOpen" class="btnLink" target="_blank" rel="noopener" style="display:none;">PDFを開く</a>
+        </div>
+        <div id="pdfUnset" class="muted">PDFリンク：未設定</div>
+        <div id="pdfViewer" class="pdfViewer" style="display:none;"></div>
+        <div id="pdfAdmin" class="portalPdfAdmin" style="display:none;">
+          <input id="pdfUrl" class="search" placeholder="Dropbox / Google Drive のPDFリンク" />
+          <button id="btnSavePdf" class="tbPrimary" type="button">保存</button>
+          <button id="btnClearPdf" class="tb" type="button">クリア</button>
+          <span id="pdfMsg" class="muted"></span>
+        </div>
+      </section>
     </div>
   </main>
 
@@ -144,3 +161,5 @@
   <script type="module" src="/src/portal.js"></script>
 </body>
 </html>
+
+
