@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Music Sheet – Prototype</title>
+
+  <!-- Tabulator (grid UI) -->
+  <link rel="stylesheet" href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator.min.css">
+  <script src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f6f7fb;
+      --panel:#ffffff;
+      --panel2:#fbfcff;
+      --line:rgba(20,30,50,.10);
+      --text:rgba(20,30,50,.92);
+      --muted:rgba(20,30,50,.60);
+      --accent:#2dd4bf;   /* teal */
+      --accent2:#60a5fa;  /* blue */
+      --shadow: 0 14px 40px rgba(15, 23, 42, .10);
+      --radius:16px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    html,body{height:100%}
+    body{
+      margin:0;
+      background:
+        radial-gradient(1100px 700px at 20% 0%, rgba(45,212,191,.14), transparent 60%),
+        radial-gradient(1100px 700px at 90% 10%, rgba(96,165,250,.12), transparent 55%),
+        var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans JP", sans-serif;
+    }
+
+    header{
+      height:56px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding:0 14px;
+      border-bottom:1px solid var(--line);
+      background: linear-gradient(to bottom, rgba(255,255,255,.96), rgba(255,255,255,.86));
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand{
+      display:flex; gap:10px; align-items:center;
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .dot{
+      width:10px; height:10px; border-radius:999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      box-shadow: 0 0 18px rgba(45,212,191,.28);
+    }
+    .top-actions{display:flex; gap:10px; align-items:center;}
+    button{
+      appearance:none; border:1px solid var(--line);
+      background: rgba(255,255,255,.75);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 8px 10px;
+      cursor:pointer;
+    }
+    button:hover{background: rgba(255,255,255,.95)}
+    .pill{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.78);
+      padding: 6px 10px;
+      border-radius:999px;
+      color: var(--muted);
+      font-size:12px;
+    }
+
+    .app{
+      height: calc(100% - 56px);
+      display:grid;
+      grid-template-columns: 1fr 360px;
+      gap: 12px;
+      padding: 12px;
+      box-sizing:border-box;
+    }
+
+    .card{
+      background: linear-gradient(to bottom, var(--panel), var(--panel2));
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      min-height: 0;
+    }
+
+    #gridWrap{display:flex; flex-direction:column; min-height:0;}
+    #gridHeader{
+      padding: 10px 12px;
+      display:flex; gap:10px; align-items:center; justify-content:space-between;
+      border-bottom:1px solid var(--line);
+    }
+    #gridHeader .left{display:flex; gap:10px; align-items:center;}
+    #projectId{
+      background: rgba(255,255,255,.9);
+      border:1px solid var(--line);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 6px 10px;
+      font-family: var(--mono);
+      width: 220px;
+    }
+    #grid{
+      flex:1;
+      min-height:0;
+      background: transparent;
+    }
+
+    /* Tabulator light tuning */
+    .tabulator{background: transparent; border:0}
+    .tabulator .tabulator-header{
+      background: rgba(255,255,255,.85);
+      border-bottom:1px solid var(--line);
+    }
+    .tabulator .tabulator-col{
+      background: transparent;
+      border-right:1px solid rgba(20,30,50,.08);
+    }
+    .tabulator .tabulator-col-title{
+      color: var(--muted);
+      font-weight:700;
+    }
+    .tabulator-row{
+      background: rgba(255,255,255,.70);
+      border-bottom:1px solid rgba(20,30,50,.08);
+    }
+    .tabulator-row:nth-child(2n){
+      background: rgba(255,255,255,.92);
+    }
+    .tabulator-row.tabulator-selected{
+      outline: 2px solid rgba(45,212,191,.35);
+      background: rgba(45,212,191,.10);
+    }
+    .tabulator-cell{
+      color: var(--text);
+      border-right:1px solid rgba(20,30,50,.06);
+    }
+    .tabulator-editing{
+      background: rgba(96,165,250,.14)!important;
+    }
+
+    .inspector{
+      display:flex; flex-direction:column;
+      min-height:0;
+    }
+    .inspector header{
+      position: relative;
+      height:auto;
+      padding: 12px;
+      border-bottom:1px solid var(--line);
+      background: transparent;
+    }
+    .inspector h2{
+      margin:0 0 6px 0;
+      font-size: 14px;
+    }
+    .muted{color:var(--muted); font-size:12px; line-height:1.4}
+    .fields{
+      padding: 12px;
+      display:flex; flex-direction:column; gap:10px;
+      overflow:auto;
+      min-height:0;
+    }
+    label{font-size:12px; color:var(--muted)}
+    textarea,input{
+      width:100%;
+      box-sizing:border-box;
+      border-radius: 12px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.9);
+      color: var(--text);
+      padding: 10px;
+      outline:none;
+      font-family: inherit;
+    }
+    textarea{min-height: 140px; resize: vertical;}
+    .row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .small{font-family: var(--mono)}
+    .hint{font-size:11px; color:rgba(20,30,50,.45)}
+    .danger{color: #ff9aa2}
+    .ok{color: #baffc9}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span> Music Sheet</div>
+    <div class="top-actions">
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <div class="app">
+    <div class="card" id="gridWrap">
+      <div id="gridHeader">
+        <div class="left">
+          <input id="projectId" value="invisible-half" />
+          <span class="pill">スプシ風グリッド + 右パネルで長文編集</span>
+        </div>
+        <div class="right">
+          <button id="btnAddRow">＋行を追加</button>
+        </div>
+      </div>
+      <div id="grid"></div>
+    </div>
+
+    <div class="card inspector">
+      <header>
+        <h2>詳細（長文はこちらで編集）</h2>
+        <div class="muted" id="selMeta">行を選択するとここに表示されます</div>
+      </header>
+      <div class="fields">
+        <div class="row">
+          <div>
+            <label>#M</label>
+            <input id="f_m" class="small" placeholder="例: 1" />
+          </div>
+          <div>
+            <label>V</label>
+            <input id="f_v" class="small" placeholder="例: 5" />
+          </div>
+        </div>
+
+        <div>
+          <label>demo</label>
+          <input id="f_demo" class="small" placeholder="A/B/C..." />
+        </div>
+
+        <div>
+          <label>scene</label>
+          <input id="f_scene" placeholder="シーン名" />
+        </div>
+
+        <div class="row">
+          <div>
+            <label>進捗</label>
+            <input id="f_status" class="small" placeholder="fix / wip / ..." />
+          </div>
+          <div>
+            <label>長さ</label>
+            <input id="f_len" class="small" placeholder="short / medium / long" />
+          </div>
+        </div>
+
+        <div>
+          <label>監督FB（長文）</label>
+          <textarea id="f_director" placeholder="監督からのFBをここに…"></textarea>
+          <div class="hint">表では省略表示 / ここで全文を編集します</div>
+        </div>
+
+        <div>
+          <label>memo（長文）</label>
+          <textarea id="f_memo" placeholder="自分用メモ…"></textarea>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>IN time</label>
+            <input id="f_in" class="small" placeholder="例: 00:10:12:00" />
+          </div>
+          <div>
+            <label>OUT time</label>
+            <input id="f_out" class="small" placeholder="例: 00:11:03:10" />
+          </div>
+        </div>
+
+        <div>
+          <button id="btnSaveDetail">詳細を保存</button>
+          <div class="hint" id="saveHint"></div>
+        </div>
+
+        <div class="hint">
+          🔒 共有運用では <b>Firestoreルール</b> が超大事（あとでサンプル貼るね）
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    // ===== Firebase SDK (modular) =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      getFirestore, collection, doc, addDoc, setDoc, updateDoc,
+      serverTimestamp, onSnapshot, query, orderBy
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    // ▼▼▼ここだけ自分のFirebase設定に差し替え▼▼▼
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+    };
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    // ===== UI =====
+    const userPill = document.getElementById("userPill");
+    const btnLogin = document.getElementById("btnLogin");
+    const btnLogout = document.getElementById("btnLogout");
+    const btnAddRow = document.getElementById("btnAddRow");
+    const projectIdInput = document.getElementById("projectId");
+
+    let currentUser = null;
+    let currentProjectId = projectIdInput.value.trim();
+    let unsub = null;
+
+    // ===== Table =====
+    const clip = (s, n=26) => {
+      if (!s) return "";
+      const oneLine = String(s).replace(/\\s+/g," ").trim();
+      return oneLine.length > n ? oneLine.slice(0,n) + "…" : oneLine;
+    };
+
+    const table = new Tabulator("#grid", {
+      index: "id",
+      height: "100%",
+      layout: "fitColumns",
+      selectable: 1,
+      clipboard: true,
+      clipboardCopyStyled: false,
+      columnDefaults:{ resizable:true, headerSort:true },
+      columns: [
+        {title:"#M", field:"m", width:70, editor:"input"},
+        {title:"V", field:"v", width:55, editor:"input"},
+        {title:"demo", field:"demo", width:70, editor:"input"},
+        {title:"scene", field:"scene", minWidth:180, editor:"input"},
+        {title:"長さ", field:"len", width:90, editor:"input"},
+        {title:"進捗", field:"status", width:90, editor:"input"},
+        {
+          title:"監督FB(省略)",
+          field:"director",
+          minWidth:200,
+          formatter:(cell)=>`<span title="${(cell.getValue()||"").replace(/"/g,"&quot;")}">${clip(cell.getValue(), 40)}</span>`,
+          editor:false,
+          cellClick:(e, cell)=> {
+            // 右パネルで編集してね、の導線
+            const row = cell.getRow();
+            row.select();
+          }
+        },
+        {
+          title:"memo(省略)",
+          field:"memo",
+          minWidth:180,
+          formatter:(cell)=>`<span title="${(cell.getValue()||"").replace(/"/g,"&quot;")}">${clip(cell.getValue(), 34)}</span>`,
+          editor:false,
+          cellClick:(e, cell)=> cell.getRow().select()
+        },
+        {title:"IN", field:"in", width:110, editor:"input"},
+        {title:"OUT", field:"out", width:110, editor:"input"},
+        {title:"updatedBy", field:"updatedBy", width:140, editor:false},
+      ],
+    });
+
+    // ===== Inspector =====
+    const selMeta = document.getElementById("selMeta");
+    const saveHint = document.getElementById("saveHint");
+    const f = {
+      m: document.getElementById("f_m"),
+      v: document.getElementById("f_v"),
+      demo: document.getElementById("f_demo"),
+      scene: document.getElementById("f_scene"),
+      status: document.getElementById("f_status"),
+      len: document.getElementById("f_len"),
+      director: document.getElementById("f_director"),
+      memo: document.getElementById("f_memo"),
+      in: document.getElementById("f_in"),
+      out: document.getElementById("f_out"),
+    };
+    const btnSaveDetail = document.getElementById("btnSaveDetail");
+
+    let selected = null; // {id, data}
+    let pendingSelectId = null;
+
+    function setInspector(row){
+      if(!row){
+        selected=null;
+        selMeta.textContent="行を選択するとここに表示されます";
+        Object.values(f).forEach(el=>el.value="");
+        return;
+      }
+      const d = row.getData();
+      selected = { id: d.id, data: d };
+      selMeta.textContent = `選択中: #M ${d.m ?? ""} / demo ${d.demo ?? ""}（ID: ${d.id}）`;
+      f.m.value = d.m ?? "";
+      f.v.value = d.v ?? "";
+      f.demo.value = d.demo ?? "";
+      f.scene.value = d.scene ?? "";
+      f.status.value = d.status ?? "";
+      f.len.value = d.len ?? "";
+      f.director.value = d.director ?? "";
+      f.memo.value = d.memo ?? "";
+      f.in.value = d.in ?? "";
+      f.out.value = d.out ?? "";
+      saveHint.textContent = "";
+    }
+
+    table.on("rowClick", (e, row)=> setInspector(row));
+
+    async function saveSelectedDetail(){
+      if(!currentUser){
+        saveHint.innerHTML = `<span class="danger">ログインしてね</span>`;
+        return;
+      }
+
+      const patch = {
+        m: f.m.value.trim() || null,
+        v: f.v.value.trim() || null,
+        demo: f.demo.value.trim() || null,
+        scene: f.scene.value.trim() || null,
+        status: f.status.value.trim() || null,
+        len: f.len.value.trim() || null,
+        director: f.director.value || "",
+        memo: f.memo.value || "",
+        in: f.in.value.trim() || null,
+        out: f.out.value.trim() || null,
+        updatedAt: serverTimestamp(),
+        updatedBy: currentUser.email || currentUser.uid,
+      };
+
+      // ★行が未選択なら「新規行を作って保存」
+      if(!selected){
+        const colRef = collection(db, "projects", currentProjectId, "cues");
+        const docRef = await addDoc(colRef, {
+          ...patch,
+          createdAt: serverTimestamp(),
+        });
+        pendingSelectId = docRef.id;
+        saveHint.innerHTML = `<span class="ok">新規行を作って保存しました</span>`;
+        return;
+      }
+
+      // 選択中なら更新
+      const ref = doc(db, "projects", currentProjectId, "cues", selected.id);
+      await updateDoc(ref, patch);
+      saveHint.innerHTML = `<span class="ok">保存しました</span>`;
+      setTimeout(()=> saveHint.textContent="", 1200);
+    }
+
+    btnSaveDetail.addEventListener("click", saveSelectedDetail);
+
+    // ===== Firestore sync =====
+    function listenProject(projectId){
+      if(unsub) unsub();
+      currentProjectId = projectId;
+
+      const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
+      unsub = onSnapshot(q, (snap)=>{
+        const rows = [];
+        snap.forEach(docu=>{
+          const d = docu.data();
+          rows.push({
+            id: docu.id,
+            m: d.m ?? null,
+            v: d.v ?? null,
+            demo: d.demo ?? "",
+            scene: d.scene ?? "",
+            len: d.len ?? "",
+            status: d.status ?? "",
+            director: d.director ?? "",
+            memo: d.memo ?? "",
+            in: d.in ?? "",
+            out: d.out ?? "",
+            updatedBy: d.updatedBy ?? "",
+          });
+        });
+
+        table.replaceData(rows);
+        if(pendingSelectId){
+          const r = table.getRow(pendingSelectId);
+          if(r){
+            r.select();
+            setInspector(r);
+            pendingSelectId = null;
+          }
+        }
+
+        // 選択行があれば、最新データに追従
+        if(selected){
+          const hit = rows.find(r=>r.id===selected.id);
+          if(hit){
+            selected.data = hit;
+            // 右パネルを上書きしすぎないよう、いったん軽めに同期
+            selMeta.textContent = `選択中: #M ${hit.m ?? ""} / demo ${hit.demo ?? ""}（ID: ${hit.id}）`;
+          }
+        }
+      }, (err)=>{
+        console.error(err);
+        saveHint.innerHTML = `<span class="danger">同期エラー: ${err?.code || err?.message}</span>`;
+      });
+    }
+
+    // ===== Auth =====
+    btnLogin.addEventListener("click", async ()=>{
+      await signInWithPopup(auth, provider);
+    });
+    btnLogout.addEventListener("click", async ()=>{
+      await signOut(auth);
+    });
+
+    onAuthStateChanged(auth, (user)=>{
+      currentUser = user;
+      if(user){
+        userPill.textContent = user.email || user.uid;
+        btnLogin.style.display = "none";
+        btnLogout.style.display = "inline-block";
+        listenProject(projectIdInput.value.trim());
+      }else{
+        userPill.textContent = "未ログイン";
+        btnLogin.style.display = "inline-block";
+        btnLogout.style.display = "none";
+        if(unsub) unsub();
+        table.replaceData([]);
+        setInspector(null);
+      }
+    });
+
+    // ===== Actions =====
+    projectIdInput.addEventListener("change", ()=>{
+      if(!currentUser) return;
+      const pid = projectIdInput.value.trim();
+      if(!pid) return;
+      setInspector(null);
+      listenProject(pid);
+    });
+
+    btnAddRow.addEventListener("click", async ()=>{
+      if(!currentUser){
+        saveHint.innerHTML = `<span class="danger">ログインしてね（右上）</span>`;
+        return;
+      }
+      try{
+        const colRef = collection(db, "projects", currentProjectId, "cues");
+        await addDoc(colRef, {
+          m: 999,
+          v: null,
+          demo: "",
+          scene: "",
+          len: "",
+          status: "wip",
+          director: "",
+          memo: "",
+          in: "",
+          out: "",
+          updatedAt: serverTimestamp(),
+          updatedBy: currentUser.email || currentUser.uid,
+          createdAt: serverTimestamp(),
+        });
+        saveHint.innerHTML = `<span class="ok">行を追加しました</span>`;
+        setTimeout(()=> saveHint.textContent="", 1200);
+      }catch(err){
+        console.error(err);
+        saveHint.innerHTML = `<span class="danger">追加失敗: ${err?.code || err?.message}</span>`;
+      }
+    });
+
+    // ===== Small quality-of-life: inline edits autosave =====
+    let timer=null;
+    table.on("cellEdited", (cell)=>{
+      if(!currentUser) return;
+      const row = cell.getRow().getData();
+      // 長文は右パネルで編集する想定なので、ここでは保存対象に入っていない
+      const patch = {
+        [cell.getField()]: cell.getValue(),
+        updatedAt: serverTimestamp(),
+        updatedBy: currentUser.email || currentUser.uid,
+      };
+      clearTimeout(timer);
+      timer = setTimeout(async ()=>{
+        const ref = doc(db, "projects", currentProjectId, "cues", row.id);
+        await updateDoc(ref, patch);
+      }, 250);
+    });
+  </script>
+</body>
+</html>
