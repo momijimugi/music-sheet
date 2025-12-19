@@ -15,6 +15,7 @@
 
     <div class="actions">
       <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
       <button id="btnLogin">Googleでログイン</button>
       <button id="btnLogout" style="display:none;">ログアウト</button>
     </div>
@@ -56,7 +57,7 @@
     <div class="card" id="inspector">
       <div class="insHead">
         <div class="title">詳細</div>
-        <div id="selMeta" class="muted">行を選択すると表示されます</div>
+        <div id="selMeta" class="muted selMetaEmpty">行を選択すると表示されます</div>
       </div>
 
       <div class="insBody">
@@ -64,7 +65,7 @@
         <div class="row2">
           <div>
             <label>監督FB（履歴）</label>
-            <label class="muted" style="display:flex;gap:8px;align-items:center;user-select:none;">
+            <label class="muted portalToggle">
               <input id="showDirectorArchived" type="checkbox">
               アーカイブも表示
             </label>
@@ -78,7 +79,7 @@
         <div class="row2">
           <div>
             <label>コメント（履歴）</label>
-            <label class="muted" style="display:flex;gap:8px;align-items:center;user-select:none;">
+            <label class="muted portalToggle">
               <input id="showCommentArchived" type="checkbox">
               アーカイブも表示
             </label>

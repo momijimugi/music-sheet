@@ -39,6 +39,26 @@ function fmtUpdated(d){
   return `${t} ${by}`.trim();
 }
 
+function previewText(text, max = 40) {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+function latestLogText(list) {
+  const arr = Array.isArray(list) ? list : [];
+  const active = arr.filter((item) => !item?.archived);
+  if (!active.length) return "";
+  const latest = active.reduce((a, b) =>
+    (a?.at?.seconds || 0) >= (b?.at?.seconds || 0) ? a : b
+  );
+  return latest?.text || "";
+}
+
+function buildLogPreview(list, fallback, max) {
+  return previewText(latestLogText(list) || fallback || "", max);
+}
+
 // ===== status config (editable, per project) =====
 const defaultStatuses = [
   { value: "wip", label: "wip", color: "#f59e0b" },
@@ -383,7 +403,18 @@ const table = new Tabulator("#grid", {
       formatter: (cell) => (cell.getValue() || "").replace(/\s+/g," ").slice(0,30) + ((cell.getValue()||"").length>30?"…":"")
     },
     { title: "監督FB(省略)", field: "director", minWidth: 220,
-      formatter: (cell) => (cell.getValue() || "").replace(/\s+/g," ").slice(0,40) + ((cell.getValue()||"").length>40?"…":"")
+      headerSort: false,
+      formatter: (cell) => {
+        const row = cell.getData();
+        return buildLogPreview(row.directorLog, row.director, 40);
+      },
+    },
+    { title: "コメント(省略)", field: "commentLog", minWidth: 220,
+      headerSort: false,
+      formatter: (cell) => {
+        const row = cell.getData();
+        return buildLogPreview(row.commentLog, row.comment, 40);
+      },
     },
     {
       title: "更新",
@@ -570,7 +601,10 @@ let selectedId = null;
 function setInspector(row){
   if(!row){
     selectedId = null;
-    $("selMeta").textContent="行を選択すると表示されます";
+    if ($("selMeta")) {
+      $("selMeta").textContent = "行を選択すると表示されます";
+      $("selMeta").classList.add("selMetaEmpty");
+    }
     renderDirectorLog([]);
     renderCommentLog([]);
     $("f_director_new").value = "";
@@ -582,7 +616,10 @@ function setInspector(row){
   }
   const d = row.getData();
   selectedId = d.id;
-  $("selMeta").textContent = `選択中: #M ${d.m ?? ""} / demo ${d.demo ?? ""}`;
+  if ($("selMeta")) {
+    $("selMeta").textContent = `選択中: #M ${d.m ?? ""} / scene ${d.scene ?? ""} / demo ${d.demo ?? ""}`;
+    $("selMeta").classList.remove("selMetaEmpty");
+  }
   $("f_m").value = d.m ?? "";
   $("f_v").value = d.v ?? "";
   $("f_demo").value = d.demo ?? "";
@@ -659,37 +696,42 @@ function renderDirectorLog(list){
     return;
   }
 
-  host.innerHTML = view
-    .sort((a,b)=> (a?.at?.seconds||0) - (b?.at?.seconds||0))
+  const viewSorted = view
+    .sort((a, b) => (a?.at?.seconds || 0) - (b?.at?.seconds || 0));
+
+  host.innerHTML = viewSorted
     .map((item, idx) => {
       const by = item.by || "";
       const at = item.at?.toDate ? item.at.toDate() : null;
       const t  = at ? at.toLocaleString() : "";
       const text = item.text || "";
+      const archived = !!item.archived;
+      const action = archived ? "restoreDirector" : "archiveDirector";
+      const actionLabel = archived ? "戻す" : "アーカイブ";
       return `
         <div class="logItem">
-          <div class="logMeta">${t}　${escapeHtml(by)}</div>
+          <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
           <div style="margin-top:8px; display:flex; gap:8px;">
-            <button class="smallBtn" type="button" data-act="archiveDirector" data-idx="${idx}">アーカイブ</button>
+            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
           </div>
         </div>
       `;
     }).join("");
 
   host.onclick = async (e)=>{
-    const btn = e.target?.closest("button[data-act='archiveDirector']");
+    const btn = e.target?.closest("button[data-act]");
     if(!btn) return;
     if(!currentUser || !selectedId) return;
 
     const idx = Number(btn.dataset.idx);
+    const act = btn.dataset.act;
     const row = table.getRow(selectedId);
     const cur = row?.getData?.() || {};
     const list0 = Array.isArray(cur.directorLog) ? cur.directorLog.slice() : [];
 
-    const view2 = showArchived ? list0 : list0.filter(x=>!x?.archived);
-    const target = view2[idx];
+    const target = viewSorted[idx];
     if(!target) return;
 
     const i = list0.findIndex(x =>
@@ -699,7 +741,14 @@ function renderDirectorLog(list){
     );
     if(i < 0) return;
 
-    list0[i] = { ...list0[i], archived: true, archivedAt: Timestamp.now(), archivedBy: who() };
+    const nextArchived = act === "archiveDirector";
+    const actionLabel = nextArchived ? "アーカイブ" : "復帰";
+    list0[i] = {
+      ...list0[i],
+      archived: nextArchived,
+      archivedAt: nextArchived ? Timestamp.now() : null,
+      archivedBy: nextArchived ? who() : null,
+    };
 
     try{
       await updateDoc(doc(db,"projects",currentProjectId,"cues",selectedId), {
@@ -707,9 +756,10 @@ function renderDirectorLog(list){
         updatedAt: serverTimestamp(),
         updatedBy: who(),
       });
+      renderDirectorLog(list0);
     }catch(e){
       console.error(e);
-      msg(`アーカイブ失敗: ${e.code || e.message}`);
+      msg(`${actionLabel}失敗: ${e.code || e.message}`);
     }
   };
 }
@@ -728,37 +778,42 @@ function renderCommentLog(list){
     return;
   }
 
-  host.innerHTML = view
-    .sort((a,b)=> (a?.at?.seconds||0) - (b?.at?.seconds||0))
+  const viewSorted = view
+    .sort((a, b) => (a?.at?.seconds || 0) - (b?.at?.seconds || 0));
+
+  host.innerHTML = viewSorted
     .map((item, idx) => {
       const by = item.by || "";
       const at = item.at?.toDate ? item.at.toDate() : null;
       const t  = at ? at.toLocaleString() : "";
       const text = item.text || "";
+      const archived = !!item.archived;
+      const action = archived ? "restoreComment" : "archiveComment";
+      const actionLabel = archived ? "戻す" : "アーカイブ";
       return `
         <div class="logItem">
-          <div class="logMeta">${t}　${escapeHtml(by)}</div>
+          <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
           <div style="margin-top:8px; display:flex; gap:8px;">
-            <button class="smallBtn" type="button" data-act="archiveComment" data-idx="${idx}">アーカイブ</button>
+            <button class="smallBtn" type="button" data-act="${action}" data-idx="${idx}">${actionLabel}</button>
           </div>
         </div>
       `;
     }).join("");
 
   host.onclick = async (e)=>{
-    const btn = e.target?.closest("button[data-act='archiveComment']");
+    const btn = e.target?.closest("button[data-act]");
     if(!btn) return;
     if(!currentUser || !selectedId) return;
 
     const idx = Number(btn.dataset.idx);
+    const act = btn.dataset.act;
     const row = table.getRow(selectedId);
     const cur = row?.getData?.() || {};
     const list0 = Array.isArray(cur.commentLog) ? cur.commentLog.slice() : [];
 
-    const view2 = showArchived ? list0 : list0.filter(x=>!x?.archived);
-    const target = view2[idx];
+    const target = viewSorted[idx];
     if(!target) return;
 
     const i = list0.findIndex(x =>
@@ -768,7 +823,14 @@ function renderCommentLog(list){
     );
     if(i < 0) return;
 
-    list0[i] = { ...list0[i], archived: true, archivedAt: Timestamp.now(), archivedBy: who() };
+    const nextArchived = act === "archiveComment";
+    const actionLabel = nextArchived ? "アーカイブ" : "復帰";
+    list0[i] = {
+      ...list0[i],
+      archived: nextArchived,
+      archivedAt: nextArchived ? Timestamp.now() : null,
+      archivedBy: nextArchived ? who() : null,
+    };
 
     try{
       await updateDoc(doc(db,"projects",currentProjectId,"cues",selectedId), {
@@ -776,9 +838,10 @@ function renderCommentLog(list){
         updatedAt: serverTimestamp(),
         updatedBy: who(),
       });
+      renderCommentLog(list0);
     }catch(e){
       console.error(e);
-      msg(`アーカイブ失敗: ${e.code || e.message}`);
+      msg(`${actionLabel}失敗: ${e.code || e.message}`);
     }
   };
 }

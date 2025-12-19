@@ -1,5 +1,5 @@
 ﻿import "./style.css";
-import { mountTopbar, getParams } from "./ui_common";
+import { mountTopbar, getParams, getPreferredTheme } from "./ui_common";
 import { mountNav } from "./nav";
 import { db } from "./firebase";
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, addDoc, query, orderBy, updateDoc, deleteDoc } from "firebase/firestore";
@@ -29,12 +29,18 @@ document.querySelector('a[href="/admin.html"]')?.setAttribute("href", `${base}ad
 const f = document.getElementById("scheduleFrame");
 const open = document.getElementById("openSchedule");
 
-if (f) {
-  f.src = `${base}schedule.html?embed=1&theme=light&project=${enc}`;
+function setScheduleTheme() {
+  const scheduleTheme = getPreferredTheme();
+  if (f) {
+    f.src = `${base}schedule.html?embed=1&theme=${scheduleTheme}&project=${enc}`;
+  }
+  if (open) {
+    open.href = `${base}schedule.html?theme=${scheduleTheme}&project=${enc}`;
+  }
 }
-if (open) {
-  open.href = `${base}schedule.html?theme=light&project=${enc}`;
-}
+
+setScheduleTheme();
+window.addEventListener("themechange", () => setScheduleTheme());
 
 const projectRef = doc(db,"projects",project);
 const portalRef  = doc(db,"projects",project,"portal","main");
@@ -46,6 +52,13 @@ let lastLogs = [];
 const isAdmin = isAdminUser(me);
 const dropboxAdmin = document.getElementById("dropboxAdmin");
 if (dropboxAdmin) dropboxAdmin.style.display = isAdmin ? "flex" : "none";
+const referenceAdmin = document.getElementById("referenceAdmin");
+if (referenceAdmin) referenceAdmin.style.display = isAdmin ? "flex" : "none";
+const referenceMsg = (t) => {
+  const el = document.getElementById("referenceMsg");
+  if (el) el.textContent = t || "";
+};
+let referenceLinks = [];
 
 const pSnap = await getDoc(projectRef);
 if (pSnap.exists()) {
@@ -65,6 +78,9 @@ const editor = $("meetingEditor");
 onSnapshot(portalRef, (snap)=>{
   const d = snap.exists() ? snap.data() : {};
   const link = (d?.dropboxLink || "").trim();
+  referenceLinks = Array.isArray(d?.referenceLinks)
+    ? d.referenceLinks.filter((v) => typeof v === "string" && v.trim())
+    : [];
 
   const openLink = document.getElementById("dropboxOpen");
   const unset = document.getElementById("dropboxUnset");
@@ -82,6 +98,8 @@ onSnapshot(portalRef, (snap)=>{
     if (unset) unset.style.display = "block";
     if(isAdmin && input) input.value = "";
   }
+
+  renderReferences(referenceLinks);
 });
 
 document.getElementById("btnSaveDropbox")?.addEventListener("click", async ()=>{
@@ -97,6 +115,29 @@ document.getElementById("btnClearDropbox")?.addEventListener("click", async ()=>
   await setDoc(portalRef, { dropboxLink: "" , updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
   msg("Dropboxリンクをクリアしました");
   setTimeout(()=>msg(""), 1000);
+});
+
+document.getElementById("btnAddReference")?.addEventListener("click", async ()=>{
+  if(!isAdmin){ referenceMsg("管理者のみ設定できます"); return; }
+  const raw = (document.getElementById("referenceInput")?.value || "").trim();
+  const url = normalizeReferenceUrl(raw);
+  if (!url) {
+    referenceMsg("リンクの形式を確認してください");
+    return;
+  }
+  const next = [...new Set([...referenceLinks, url])];
+  await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  const input = document.getElementById("referenceInput");
+  if (input) input.value = "";
+  referenceMsg("参考曲を追加しました");
+  setTimeout(()=>referenceMsg(""), 1200);
+});
+
+document.getElementById("referenceInput")?.addEventListener("keydown", (e)=>{
+  if (e.key === "Enter") {
+    e.preventDefault();
+    document.getElementById("btnAddReference")?.click();
+  }
 });
 
 // Notion風：ツールバー（太字など）
@@ -156,6 +197,98 @@ function youtubeId(url){
     }
   }catch{}
   return null;
+}
+
+function normalizeReferenceUrl(raw){
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  try{
+    return new URL(s).toString();
+  }catch{
+    try{
+      return new URL(`https://${s}`).toString();
+    }catch{
+      return "";
+    }
+  }
+}
+
+function getReferenceEmbed(url){
+  const id = youtubeId(url);
+  if (id) {
+    return { provider: "youtube", label: "YouTube", embedUrl: `https://www.youtube.com/embed/${id}` };
+  }
+  try{
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+    if (host.includes("spotify.com")) {
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        const type = parts[0];
+        const key = parts[1];
+        return { provider: "spotify", label: "Spotify", embedUrl: `https://open.spotify.com/embed/${type}/${key}` };
+      }
+    }
+    if (host.includes("music.apple.com")) {
+      const embed = new URL(u.toString());
+      embed.hostname = "embed.music.apple.com";
+      return { provider: "apple", label: "Apple Music", embedUrl: embed.toString() };
+    }
+  }catch{}
+  return null;
+}
+
+function renderReferences(list){
+  const host = document.getElementById("referenceList");
+  const unset = document.getElementById("referenceUnset");
+  const count = document.getElementById("referenceCount");
+  if (!host) return;
+
+  if (!list.length) {
+    host.innerHTML = "";
+    if (unset) unset.style.display = "block";
+    if (count) count.textContent = "";
+    return;
+  }
+
+  if (unset) unset.style.display = "none";
+  if (count) count.textContent = `${list.length}件`;
+
+  host.innerHTML = list.map((url, idx) => {
+    const embed = getReferenceEmbed(url);
+    const label = embed?.label || "リンク";
+    const safeUrl = escapeHtml(url);
+    const embedHtml = embed
+      ? `
+        <div class="referenceEmbed" data-provider="${embed.provider}">
+          <iframe src="${embed.embedUrl}" loading="lazy" allow="autoplay *; encrypted-media *; clipboard-write" allowfullscreen></iframe>
+        </div>
+      `
+      : "";
+    const actions = isAdmin
+      ? `<button class="smallBtn ghost" type="button" data-act="removeReference" data-idx="${idx}">削除</button>`
+      : "";
+    return `
+      <div class="referenceCard">
+        <div class="referenceHeader">
+          <span class="tagPill">${label}</span>
+          ${actions}
+        </div>
+        ${embedHtml}
+        <a class="referenceLink" href="${safeUrl}" target="_blank" rel="noopener">${safeUrl}</a>
+      </div>
+    `;
+  }).join("");
+
+  host.onclick = async (e) => {
+    const btn = e.target?.closest("button[data-act='removeReference']");
+    if (!btn) return;
+    if (!isAdmin) return;
+    const idx = Number(btn.dataset.idx);
+    if (Number.isNaN(idx)) return;
+    const next = referenceLinks.filter((_, i) => i !== idx);
+    await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  };
 }
 
 function buildPreviews(html){

@@ -1,6 +1,7 @@
 import "./style.css";
 import "tabulator-tables/dist/css/tabulator.min.css";
 import { mountNav } from "./nav";
+import { getPreferredTheme, mountThemeToggle } from "./ui_common";
 import { auth, db, provider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import {
@@ -9,7 +10,10 @@ import {
   deleteField,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -34,6 +38,96 @@ const memberMsg = (t) => {
   if (el) el.textContent = t || "";
 };
 
+const scheduleTitle = $("scheduleSelectionTitle");
+const scheduleMeta = $("scheduleSelectionMeta");
+const scheduleDirectorLog = $("scheduleDirectorLog");
+const scheduleCommentLog = $("scheduleCommentLog");
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderScheduleLog(host, items, emptyText) {
+  if (!host) return;
+  if (!items.length) {
+    host.innerHTML = `<div class="muted">${emptyText}</div>`;
+    return;
+  }
+  host.innerHTML = items.map((item) => {
+    const cue = item.cue || {};
+    const at = item.at?.toDate ? item.at.toDate() : null;
+    const t = at ? at.toLocaleString() : "";
+    const by = item.by || "";
+    const metaParts = [];
+    if (cue.m != null && cue.m !== "") metaParts.push(`#M ${cue.m}`);
+    if (cue.scene) metaParts.push(cue.scene);
+    if (t) metaParts.push(t);
+    if (by) metaParts.push(by);
+    return `
+      <div class="logItem">
+        <div class="logMeta">${escapeHtml(metaParts.join(" / "))}</div>
+        <div class="logText">${escapeHtml(item.text || "")}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function flattenLogs(cues, key) {
+  const items = [];
+  cues.forEach((cue) => {
+    const list = Array.isArray(cue[key]) ? cue[key] : [];
+    list.forEach((entry) => {
+      if (entry && !entry.archived) {
+        items.push({ ...entry, cue });
+      }
+    });
+  });
+  items.sort((a, b) => (b?.at?.seconds || 0) - (a?.at?.seconds || 0));
+  return items.slice(0, 12);
+}
+
+async function loadScheduleLogs({ projectId, projectName, trackName } = {}) {
+  if (!projectId) return;
+  if (scheduleTitle) {
+    scheduleTitle.textContent = trackName || "選択中の曲";
+  }
+  if (scheduleMeta) {
+    const parts = [];
+    if (projectName) parts.push(projectName);
+    if (projectId) parts.push(`#${projectId}`);
+    if (trackName) parts.push(`曲: ${trackName}`);
+    scheduleMeta.textContent = parts.join(" / ");
+  }
+  renderScheduleLog(scheduleDirectorLog, [], "読み込み中...");
+  renderScheduleLog(scheduleCommentLog, [], "読み込み中...");
+
+  const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
+  const snap = await getDocs(q);
+  const cues = [];
+  snap.forEach((d) => cues.push({ id: d.id, ...(d.data() || {}) }));
+
+  let filtered = cues;
+  const keyword = String(trackName || "").trim().toLowerCase();
+  if (keyword) {
+    const matches = cues.filter((cue) =>
+      [cue.scene, cue.demo, cue.memo, cue.note]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(keyword))
+    );
+    if (matches.length) filtered = matches;
+  }
+
+  const directorItems = flattenLogs(filtered, "directorLog");
+  const commentItems = flattenLogs(filtered, "commentLog");
+  renderScheduleLog(scheduleDirectorLog, directorItems, "監督FBはまだありません");
+  renderScheduleLog(scheduleCommentLog, commentItems, "コメントはまだありません");
+}
+
 function normEmail(s) {
   return String(s || "").trim().toLowerCase();
 }
@@ -50,6 +144,20 @@ let memberUnsub = null;
 let currentMemberProjectId = "";
 
 mountNav({ current: "admin" });
+mountThemeToggle();
+window.addEventListener("themechange", () => setScheduleFrameAll());
+renderScheduleLog(scheduleDirectorLog, [], "曲名をクリックすると表示されます");
+renderScheduleLog(scheduleCommentLog, [], "曲名をクリックすると表示されます");
+
+window.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "SCHEDULE_TRACK_SELECT") return;
+  loadScheduleLogs(data).catch((err) => {
+    console.error(err);
+    renderScheduleLog(scheduleDirectorLog, [], "読み込みに失敗しました");
+    renderScheduleLog(scheduleCommentLog, [], "読み込みに失敗しました");
+  });
+});
 
 $("btnLogin")?.addEventListener("click", async () => {
   await signInWithPopup(auth, provider);
@@ -68,7 +176,8 @@ function setScheduleFrameAll() {
   const open = document.getElementById("openSchedule");
   if (!f || !open) return;
 
-  const url = `${base}schedule.html?theme=light&scope=all`;
+  const theme = getPreferredTheme();
+  const url = `${base}schedule.html?theme=${theme}&scope=all`;
   f.src = url + "&embed=1";
   open.href = url;
 }
@@ -238,6 +347,7 @@ function renderProjectList(items) {
           <div class="btns">
             <a class="btnLink" href="${base}portal.html?project=${id}">ポータル</a>
             <a class="btnLink" href="${base}sheet.html?project=${id}">Music Sheet</a>
+            <button class="smallBtn" data-act="rename" data-id="${id}" data-name="${encodeURIComponent(name)}">名前変更</button>
             <button class="smallBtn" data-act="archive" data-id="${id}" data-on="${archiveOn}">${archiveLabel}</button>
             <button class="smallBtn danger" data-act="delete" data-id="${id}">消去</button>
           </div>
@@ -285,6 +395,24 @@ list?.addEventListener("click", async (e) => {
   const by = currentUser?.email || currentUser?.uid || "";
 
   try {
+    if (act === "rename") {
+      const raw = b.dataset.name || "";
+      const currentName = raw ? decodeURIComponent(raw) : id;
+      const next = prompt("新しいプロジェクト名を入力してください", currentName);
+      if (next === null) return;
+      const name = next.trim();
+      if (!name) {
+        alert("プロジェクト名を入力してください");
+        return;
+      }
+      if (name === currentName) return;
+      await updateDoc(ref, {
+        name,
+        updatedAt: serverTimestamp(),
+        updatedBy: by,
+      });
+      return;
+    }
     if (act === "archive") {
       const on = b.dataset.on === "1";
       await updateDoc(ref, {

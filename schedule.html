@@ -751,6 +751,10 @@
       color: var(--text-main);
       font-weight: 500;
       font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .row-header-title:hover {
+      text-decoration: underline;
     }
 
     .row-header-actions {
@@ -2022,7 +2026,13 @@
       renderAll();
     }
 
+    const THEME_KEY = 'theme';
+
     function detectPreferredTheme() {
+      const stored = localStorage.getItem(THEME_KEY);
+      if (stored === 'light' || stored === 'dark') {
+        return stored;
+      }
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
         return 'light';
       }
@@ -3210,7 +3220,11 @@ function scheduleRemoteSave() {
               <td class="row-header-cell">
                 <div class="row-header-inner">
                   <div class="row-header-top">
-                    <div class="row-header-title">${escapeHtml(track.name)}</div>
+                    <div class="row-header-title"
+                         data-project-id="${project.id}"
+                         data-track-id="${track.id}"
+                         data-track-name="${escapeHtml(track.name)}"
+                         data-project-name="${escapeHtml(project.name)}">${escapeHtml(track.name)}</div>
                     <div class="row-header-actions">
                       <button type="button"
                               class="btn btn-ghost btn-sm btn-icon-only row-header-memo-btn"
@@ -3518,6 +3532,24 @@ function scheduleRemoteSave() {
           const projectId = btn.dataset.projectId;
           const trackId = btn.dataset.trackId;
           openTrackMemoEditor(projectId, trackId);
+        });
+      });
+
+      // 曲名クリック → 親へ通知（管理画面向け）
+      document.querySelectorAll('.row-header-title').forEach(title => {
+        title.addEventListener('click', (ev) => {
+          if (!IS_EMBED) return;
+          ev.stopPropagation();
+          const payload = {
+            type: 'SCHEDULE_TRACK_SELECT',
+            projectId: title.dataset.projectId || '',
+            trackId: title.dataset.trackId || '',
+            trackName: title.dataset.trackName || title.textContent || '',
+            projectName: title.dataset.projectName || '',
+          };
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage(payload, '*');
+          }
         });
       });
 
@@ -4657,6 +4689,7 @@ function scheduleRemoteSave() {
     function setTheme(theme) {
       ensureSettingsObject();
       const mode = (theme === 'light') ? 'light' : 'dark';
+      localStorage.setItem(THEME_KEY, mode);
       state.settings.theme = mode;
       saveState();
       applyTheme(mode);
