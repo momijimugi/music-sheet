@@ -1,57 +1,15 @@
 <!doctype html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Music Sheet</title>
-
-    <!-- Tabulator CSS（npmから読み込み） -->
-    <link rel="stylesheet" href="/node_modules/tabulator-tables/dist/css/tabulator.min.css" />
-  </head>
-  <body>
-    <header class="top">
-      <div class="brand">Music Sheet</div>
-      <div class="actions">
-        <span id="userPill" class="pill">未ログイン</span>
-        <button id="btnLogin">Googleでログイン</button>
-        <button id="btnLogout" style="display:none;">ログアウト</button>
-      </div>
-    </header>
-
-    <div class="layout">
-      <div class="card">
-        <div class="cardHead">
-          <input id="projectId" value="invisible-half" />
-          <button id="btnAddRow">＋行を追加</button>
-          <span id="msg" class="msg"></span>
-        </div>
-        <div id="grid"></div>
-      </div>
-
-      <div class="card">
-        <div class="insHead">
-          <div class="title">詳細</div>
-          <div id="selMeta" class="muted">行を選択すると表示されます</div>
-        </div>
-        <div class="insBody">
-          <label>#M <input id="f_m" /></label>
-          <label>V <input id="f_v" /></label>
-          <label>demo <input id="f_demo" /></label>
-          <label>scene <input id="f_scene" /></label>
-          <label>進捗 <input id="f_status" /></label>
-          <label>長さ <input id="f_len" /></label>
-
-          <label>監督FB<textarea id="f_director"></textarea></label>
-          <label>memo<textarea id="f_memo"></textarea></label>
-
-          <label>IN <input id="f_in" /></label>
-          <label>OUT <input id="f_out" /></label>
-
-          <button id="btnSaveDetail">詳細を保存</button>
-        </div>
-      </div>
-    </div>
-
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Portal</title>
+  <meta http-equiv="refresh" content="0; url=./admin.html">
+</head>
+<body>
+  <p>管理画面へ移動中…</p>
+  <script>
+    location.replace("./admin.html");
+  </script>
+</body>
 </html>

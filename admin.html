@@ -1,0 +1,78 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin | Music Portal</title>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Admin</div>
+    <div id="nav" class="nav"></div>
+    <div class="actions">
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="card pad">
+      <h2>プロジェクト作成</h2>
+      <div class="row2">
+        <input id="newName" placeholder="プロジェクト名" />
+        <button id="btnCreate">作成</button>
+      </div>
+      <div id="msg" class="muted"></div>
+    </section>
+
+    <section class="card pad" style="margin-top:12px;">
+      <h2>プロジェクト一覧</h2>
+      <div id="list" class="list"></div>
+    </section>
+
+    <div class="card pad" style="margin-top:12px;">
+      <div class="card-head" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+        <h2 style="margin:0;">メンバー管理</h2>
+        <span id="memberMsg" class="muted"></span>
+      </div>
+
+      <div style="display:grid;grid-template-columns: 1fr; gap:12px; margin-top:10px;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <div class="muted">対象プロジェクト</div>
+          <select id="memberProjectPicker" class="select"></select>
+
+          <button id="btnInitProjectDoc" class="ghost">このプロジェクトを初期化（owner/member）</button>
+          <a id="btnCopyInvite" class="btnLink" href="javascript:void(0)">招待リンクをコピー</a>
+        </div>
+
+        <div class="muted">ownerEmail</div>
+        <div id="ownerEmailView" class="pill">—</div>
+
+        <div class="muted">メンバー（memberEmails）</div>
+        <div id="memberList" style="display:grid;gap:8px;"></div>
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <input id="memberEmailInput" class="search" placeholder="追加するメール（例: client@gmail.com）" style="min-width:280px;" />
+          <button id="btnAddMember" class="tbPrimary">追加</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card pad" style="margin-top:12px;">
+      <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div>
+          <div class="muted">All Projects</div>
+          <h2 style="margin:0;">全案件スケジュール</h2>
+        </div>
+        <a class="btnLink" id="openSchedule" target="_blank" rel="noopener">フル画面で開く</a>
+      </div>
+
+      <iframe id="adminScheduleFrame" class="schedule-frame" src="about:blank" loading="lazy"></iframe>
+    </div>
+
+  </main>
+
+  <script type="module" src="/src/admin.js"></script>
+</body>
+</html>

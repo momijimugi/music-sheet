@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sheet | Music Portal</title>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span id="sheetTitle">Music Sheet</span>
+      <span id="projectNamePill" class="pill" style="margin-left:8px;">…</span>
+    </div>
+    <div id="nav" class="nav"></div>
+
+    <div class="actions">
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <!-- ✅ ここが必要：Music Sheet の実DOM -->
+  <div class="layout" id="layout">
+    <div class="card">
+      <div class="cardHead">
+        <div class="left">
+          <input id="projectId" style="display:none;" />
+          <input id="q" class="search" placeholder="検索（scene / memo / FB など）" />
+          <select id="statusFilter" class="select">
+            <option value="">進捗：すべて</option>
+          </select>
+          <select id="fpsDefault" class="select" title="フレームレート（このシート共通）">
+            <option value="24">24</option>
+            <option value="25">25</option>
+            <option value="30">30</option>
+          </select>
+          <span class="msg" id="msg"></span>
+        </div>
+
+        <div class="right">
+          <button id="btnToggleInspector" class="ghost" type="button">詳細を開く</button>
+          <button id="btnStatusConfig" class="ghost" type="button">進捗設定</button>
+          <button id="btnBulk" type="button" class="ghost">一括編集: OFF</button>
+          <button id="btnUndo" type="button" class="ghost">Undo</button>
+          <button id="btnAddRow" type="button">＋行を追加</button>
+          <button id="btnDeleteRow" type="button" class="ghost">- 行を削除</button>
+        </div>
+      </div>
+
+      <div id="grid"></div>
+    </div>
+
+    <div class="divider" id="divider" title="ドラッグで幅変更"></div>
+
+    <div class="card" id="inspector">
+      <div class="insHead">
+        <div class="title">詳細</div>
+        <div id="selMeta" class="muted">行を選択すると表示されます</div>
+      </div>
+
+      <div class="insBody">
+        
+        <div class="row2">
+          <div>
+            <label>監督FB（履歴）</label>
+            <label class="muted" style="display:flex;gap:8px;align-items:center;user-select:none;">
+              <input id="showDirectorArchived" type="checkbox">
+              アーカイブも表示
+            </label>
+            <div id="directorLog" class="logBox"></div>
+
+            <label>新しいFBを追加<textarea id="f_director_new"></textarea></label>
+            <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
+          </div>
+        </div>
+
+        <div class="row2">
+          <div>
+            <label>コメント（履歴）</label>
+            <label class="muted" style="display:flex;gap:8px;align-items:center;user-select:none;">
+              <input id="showCommentArchived" type="checkbox">
+              アーカイブも表示
+            </label>
+            <div id="commentLog" class="logBox"></div>
+
+            <label>新しいコメントを追加<textarea id="f_comment_new"></textarea></label>
+            <button id="btnAddComment" type="button">コメントを追加</button>
+          </div>
+        </div>
+
+        <div class="row2">
+          <label>コメント（memo）<textarea id="f_memo"></textarea></label>
+        </div>
+
+        <div class="row4">
+          <label>#M <input id="f_m" /></label>
+          <label>V <input id="f_v" /></label>
+          <label>demo <input id="f_demo" /></label>
+          <label>進捗
+            <div class="tagSelectWrap">
+              <select id="f_status" class="select"></select>
+              <span id="statusTagPreview" class="tagPill">—</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="row3">
+          <label>scene <input id="f_scene" /></label>
+          <label>長さ <select id="f_len" class="select"></select></label>
+          <label>更新メモ（任意） <input id="f_note" /></label>
+        </div>
+
+        <div class="row3">
+          <label>IN timecode <input id="f_in" placeholder="HH:MM:SS:FF" /></label>
+          <label>OUT timecode <input id="f_out" placeholder="HH:MM:SS:FF" /></label>
+          <label>INTERVAL <input id="f_interval" disabled /></label>
+        </div>
+
+        <button id="btnSaveDetail" type="button">詳細を保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 進捗設定モーダル -->
+  <div id="overlay" class="overlay hidden"></div>
+  <div id="statusModal" class="modal hidden">
+    <div class="modalHead">
+      <div class="modalTitle">進捗設定</div>
+      <button id="btnCloseStatus" class="ghost" type="button">閉じる</button>
+    </div>
+    <div class="modalBody">
+      <div id="statusList" class="statusList"></div>
+      <div class="modalActions">
+        <button id="btnAddStatus" type="button">＋追加</button>
+        <button id="btnSaveStatuses" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ sheet専用JS -->
+  <script type="module" src="/src/sheet.js"></script>
+</body>
+</html>

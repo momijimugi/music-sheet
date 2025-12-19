@@ -1,0 +1,127 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal | Music Portal</title>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Portal</div>
+    <div id="nav" class="nav"></div>
+    <div class="actions">
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="card pad">
+      <div class="row2">
+        <div>
+          <div class="muted">Project</div>
+          <div id="pTitle" class="title"></div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;">
+          <a class="btnLink" id="toSheet">Music Sheetへ</a>
+          <a class="btnLink" href="./admin.html">管理へ戻る</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ★ Dropbox -->
+    <div class="card pad" style="margin-top:12px;">
+      <div class="card-head">
+        <h2 style="margin:0;">素材・共有リンク</h2>
+        <a id="dropboxOpen" class="btnLink" target="_blank" rel="noopener" style="display:none;">Dropboxを開く</a>
+      </div>
+
+      <div id="dropboxUnset" class="muted">Dropboxリンク：未設定</div>
+
+      <!-- adminだけ見える -->
+      <div id="dropboxAdmin" style="display:none; margin-top:10px; gap:10px; align-items:center;">
+        <input id="dropboxUrl" class="search" placeholder="Dropbox共有リンクを貼る" style="min-width:320px; flex:1;" />
+        <button id="btnSaveDropbox" class="tbPrimary" type="button">保存</button>
+        <button id="btnClearDropbox" class="tb" type="button">クリア</button>
+      </div>
+    </div>
+
+    <div class="meetingStack">
+      <!-- ★ 打ち合わせメモ（Notion風トグル） -->
+      <div class="card pad" style="margin-top:12px;">
+        <details id="meetingToggle" open class="toggle">
+          <summary class="toggleSummary">
+            <span>打ち合わせメモ</span>
+            <span class="muted">（クリックで開閉）</span>
+          </summary>
+
+          <div class="toggleBody">
+            <div class="meetingTitleRow">
+              <input id="meetingTitle" class="search" placeholder="タイトル（例：12/19 監督FBまとめ）" />
+            </div>
+            <div class="toolbar">
+              <button class="tb" data-cmd="bold"><b>B</b></button>
+              <button class="tb" data-cmd="italic"><i>I</i></button>
+              <button class="tb" data-cmd="underline"><u>U</u></button>
+              <span class="sep"></span>
+              <button class="tb" data-cmd="insertUnorderedList">● リスト</button>
+              <button class="tb" data-cmd="insertOrderedList">1. リスト</button>
+              <span class="sep"></span>
+              <button class="tb" id="btnMeetingClear">クリア</button>
+
+              <div style="flex:1"></div>
+              <button id="btnSave" class="tbPrimary">保存</button>
+              <span id="msg" class="muted"></span>
+            </div>
+
+            <div id="meetingEditor" class="editor" contenteditable="true" spellcheck="false"
+                 data-placeholder="議事録を貼り付けたり、要点を箇条書きしたり。Ctrl+Bで太字もOK。"></div>
+          </div>
+        </details>
+      </div>
+
+      <div class="card pad" style="margin-top:12px;">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <h2 style="margin:0;">打ち合わせメモ（最新）</h2>
+            <span id="latestMeta" class="muted"></span>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="btnArchiveLatest" class="ghost" type="button">アーカイブ</button>
+            <button id="btnDeleteLatest" class="ghost danger" type="button">消去</button>
+          </div>
+        </div>
+
+        <div id="latestMeeting" class="logBox"></div>
+      </div>
+
+      <div class="card pad" style="margin-top:12px;">
+        <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+          <h2 style="margin:0;">過去ログ</h2>
+
+          <label class="muted" style="display:flex;gap:8px;align-items:center;user-select:none;">
+            <input id="showArchived" type="checkbox">
+            アーカイブも表示
+          </label>
+        </div>
+
+        <div id="meetingHistory" style="display:grid;gap:10px;margin-top:10px;"></div>
+      </div>
+    </div>
+
+    <div class="card pad" style="margin-top:12px;">
+      <div class="card-head" style="display:flex;align-items:center;justify-content:space-between;">
+        <h2 style="margin:0;">スケジュール</h2>
+        <a class="btnLink" id="openSchedule" href="./schedule.html" target="_blank" rel="noopener">フル画面で開く</a>
+      </div>
+
+      <iframe id="scheduleFrame" class="schedule-frame" src="about:blank" loading="lazy"></iframe>
+    </div>
+  </main>
+
+
+  <script type="module" src="/src/portal.js"></script>
+</body>
+</html>
