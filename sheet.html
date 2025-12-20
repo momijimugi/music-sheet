@@ -4,16 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sheet | Music Portal</title>
+  <link rel="stylesheet" href="/src/style.css" />
 </head>
 <body>
   <header class="top">
     <div class="brand">
-      <span id="sheetTitle">Music Sheet</span>
-      <span id="projectNamePill" class="pill" style="margin-left:8px;">…</span>
+      <span class="pageName">Music Sheet</span>
+      <span class="projectLabel">プロジェクト名：</span>
+      <span id="projectNamePill" class="pill projectName">?</span>
+      <select id="projectSwitcher" class="select headerSelect" style="display:none;"></select>
     </div>
     <div id="nav" class="nav"></div>
 
     <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
       <span id="userPill" class="pill">未ログイン</span>
       <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
       <button id="btnLogin">Googleでログイン</button>
@@ -55,74 +59,90 @@
       </div>
 
       <div class="insBody">
-        
-        <div class="row2">
-          <div>
-            <label>監督FB（履歴）</label>
-            <div class="insToggleRow">
-              <span class="toggleLabel muted">アーカイブも表示</span>
-              <label class="portalToggle">
-                <input id="showDirectorArchived" type="checkbox">
-              </label>
-            </div>
-            <div id="directorLog" class="logBox"></div>
-
-            <label>新しいFBを追加<textarea id="f_director_new"></textarea></label>
-            <div class="insActions">
-              <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
-            </div>
-          </div>
+        <div class="insTabs">
+          <button class="insTab is-active" data-tab="fb" type="button">監督FB</button>
+          <button class="insTab" data-tab="comment" type="button">コメント</button>
+          <button class="insTab" data-tab="reference" type="button">参考曲</button>
+          <button class="insTab" data-tab="status" type="button">ステータス</button>
+          <button class="insTab" data-tab="timecode" type="button">時間</button>
         </div>
 
-        <div class="row2">
-          <div>
-            <label>コメント（履歴）</label>
-            <div class="insToggleRow">
-              <span class="toggleLabel muted">アーカイブも表示</span>
-              <label class="portalToggle">
-                <input id="showCommentArchived" type="checkbox">
-              </label>
-            </div>
-            <div id="commentLog" class="logBox"></div>
+        <section class="insTabPanel is-active" data-tab="fb">
+          <div class="row2">
+            <div>
+              <label>新しいFBを追加<textarea id="f_director_new"></textarea></label>
+              <div class="insActions">
+                <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
+              </div>
 
-            <label>新しいコメントを追加<textarea id="f_comment_new"></textarea></label>
-            <div class="insActions">
-              <button id="btnAddComment" type="button">コメントを追加</button>
+              <label>参考曲 <input id="f_reference_shared" placeholder="YouTube / Spotify などのリンク" /></label>
+              <div id="referencePreviewShared" class="referencePreview"></div>
+
+              <label>監督FB（履歴）</label>
+              <div class="insToggleRow">
+                <span class="toggleLabel muted">アーカイブも表示</span>
+                <label class="portalToggle">
+                  <input id="showDirectorArchived" type="checkbox">
+                </label>
+              </div>
+              <div id="directorLog" class="logBox"></div>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="row2">
-          <div>
-            <label>参考曲 <input id="f_reference" placeholder="YouTube / Spotify などのリンク" /></label>
-            <div id="referencePreview" class="referencePreview"></div>
-          </div>
-        </div>
+        <section class="insTabPanel" data-tab="comment">
+          <div class="row2">
+            <div>
+              <label>新しいコメントを追加<textarea id="f_comment_new"></textarea></label>
+              <div class="insActions">
+                <button id="btnAddComment" type="button">コメントを追加</button>
+              </div>
 
-        <div class="row2">
-          <label>コメント（memo）<textarea id="f_memo"></textarea></label>
-        </div>
-        <div class="row2">
-          <label>長さ <select id="f_len" class="select"></select></label>
-          <label>進捗
-            <div class="tagSelectWrap">
-              <select id="f_status" class="select"></select>
-              <span id="statusTagPreview" class="tagPill">?</span>
+              <label>コメント（履歴）</label>
+              <div class="insToggleRow">
+                <span class="toggleLabel muted">アーカイブも表示</span>
+                <label class="portalToggle">
+                  <input id="showCommentArchived" type="checkbox">
+                </label>
+              </div>
+              <div id="commentLog" class="logBox"></div>
             </div>
-          </label>
-        </div>
+          </div>
+        </section>
 
-        <div class="row2">
-          <label>更新メモ（任意） <input id="f_note" /></label>
-        </div>
+        <section class="insTabPanel" data-tab="reference">
+          <div class="row2">
+            <div>
+              <label>参考曲 <input id="f_reference" placeholder="YouTube / Spotify などのリンク" /></label>
+              <div id="referencePreview" class="referencePreview"></div>
+            </div>
+          </div>
+        </section>
 
-        <div class="row3">
-          <label>IN timecode <input id="f_in" placeholder="HH:MM:SS:FF" /></label>
-          <label>OUT timecode <input id="f_out" placeholder="HH:MM:SS:FF" /></label>
-          <label>INTERVAL <input id="f_interval" disabled /></label>
-        </div>
+        <section class="insTabPanel" data-tab="status">
+          <div class="row2">
+            <label>長さ <select id="f_len" class="select"></select></label>
+            <label>進捗
+              <div class="tagSelectWrap">
+                <select id="f_status" class="select"></select>
+                <span id="statusTagPreview" class="tagPill">?</span>
+              </div>
+            </label>
+          </div>
+          <div class="row2">
+            <label class="spanAll">更新メモ（任意） <input id="f_note" /></label>
+          </div>
+        </section>
 
-        <div class="insActions">
+        <section class="insTabPanel" data-tab="timecode">
+          <div class="row3">
+            <label>IN timecode <input id="f_in" placeholder="HH:MM:SS:FF" /></label>
+            <label>OUT timecode <input id="f_out" placeholder="HH:MM:SS:FF" /></label>
+            <label>INTERVAL <input id="f_interval" disabled /></label>
+          </div>
+        </section>
+
+        <div class="insFooter">
           <button id="btnSaveDetail" type="button">詳細を保存</button>
         </div>
       </div>

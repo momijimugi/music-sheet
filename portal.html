@@ -7,9 +7,15 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand">Portal</div>
+    <div class="brand">
+      <span class="pageName">Portal</span>
+      <span class="projectLabel">プロジェクト名：</span>
+      <span id="portalProjectPill" class="pill projectName">?</span>
+      <select id="projectSwitcher" class="select headerSelect" style="display:none;"></select>
+    </div>
     <div id="nav" class="nav"></div>
     <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
       <span id="userPill" class="pill">未ログイン</span>
       <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
       <button id="btnLogin">Googleでログイン</button>
@@ -30,6 +36,13 @@
               <a class="btnLink" id="toSheet">Music Sheetへ</a>
               <a class="btnLink" href="./admin.html">管理へ戻る</a>
             </div>
+          </div>
+          <div id="portalGuestRow" class="portalGuestRow" style="display:none;">
+            <span class="muted">デバッグゲストモード</span>
+            <label class="portalToggle">
+              <input id="togglePortalGuest" type="checkbox">
+            </label>
+            <span id="portalGuestState" class="muted"></span>
           </div>
         </div>
 

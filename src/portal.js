@@ -1,19 +1,75 @@
 ﻿import "./style.css";
 import { mountTopbar, getParams, getPreferredTheme } from "./ui_common";
 import { mountNav } from "./nav";
-import { db } from "./firebase";
-import { doc, getDoc, onSnapshot, setDoc, serverTimestamp, collection, addDoc, query, orderBy, updateDoc, deleteDoc } from "firebase/firestore";
+import { auth, db } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, getDocs, onSnapshot, setDoc, serverTimestamp, collection, addDoc, orderBy, updateDoc, deleteDoc, query } from "firebase/firestore";
 
 const $ = (id)=>document.getElementById(id);
 const msg = (t)=>($("msg").textContent=t||"");
+const lastUpdatedEl = document.getElementById("lastUpdated");
+let portalUpdatedAt = null;
+let portalUpdatedBy = "";
+let logUpdatedAt = null;
+let logUpdatedBy = "";
+
+function tsValue(ts){
+  if (!ts) return 0;
+  if (ts?.seconds != null) return ts.seconds * 1000 + (ts.nanoseconds || 0) / 1e6;
+  if (ts instanceof Date) return ts.getTime();
+  return 0;
+}
+
+function setLastUpdated(ts, by){
+  if (!lastUpdatedEl) return;
+  if (!ts) {
+    lastUpdatedEl.textContent = "更新: --";
+    return;
+  }
+  const name = formatByName(by);
+  const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+  const t = d ? d.toLocaleString() : "";
+  const label = [t, name].filter(Boolean).join(" ");
+  lastUpdatedEl.textContent = `更新: ${label || "--"}`;
+}
+
+function formatByName(by){
+  const s = String(by || "").trim();
+  if (!s) return "";
+  if (s.includes("@")) return s.split("@")[0];
+  return s;
+}
+
+function updateHeaderUpdated(){
+  const portalVal = tsValue(portalUpdatedAt);
+  const logVal = tsValue(logUpdatedAt);
+  if (logVal >= portalVal) {
+    setLastUpdated(logUpdatedAt, logUpdatedBy);
+  } else {
+    setLastUpdated(portalUpdatedAt, portalUpdatedBy);
+  }
+}
 
 const me = await mountTopbar();
-const { project } = getParams();
-if(!project){ msg("project が指定されてないよ"); throw new Error("missing project"); }
-localStorage.setItem("lastProject", project);
-
-mountNav({ current: "portal", projectId: project });
+const whoName = () => me?.displayName || me?.email || me?.uid || "";
 const base = import.meta.env.BASE_URL || "/";
+const guestUrl = `${base}index.html`;
+const { project } = getParams();
+if(!project){
+  location.replace(guestUrl);
+  throw new Error("missing project");
+}
+localStorage.setItem("lastProject", project);
+if (!me) {
+  msg("ログインしてください");
+  onAuthStateChanged(auth, (user) => {
+    if (user) location.reload();
+  });
+  throw new Error("not logged in");
+}
+const projectPill = document.getElementById("portalProjectPill");
+const projectSwitcher = document.getElementById("projectSwitcher");
+const adminReturnLink = document.querySelector(".portalActions a[href$='admin.html']");
 
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
   .split(",").map(s=>s.trim()).filter(Boolean);
@@ -21,26 +77,194 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
 function isAdminUser(u){
   return !!u?.email && ADMIN_EMAILS.includes(u.email);
 }
+mountNav({ current: "portal", projectId: project, hideAdmin: !isAdminUser(me) });
+function normEmail(value){
+  return String(value || "").trim().toLowerCase();
+}
+let inviteIndexCache = null;
+async function loadInviteIndex(){
+  if (inviteIndexCache) return inviteIndexCache;
+  const empty = { ids: new Set(), names: {} };
+  if (isAdminUser(me)) {
+    inviteIndexCache = empty;
+    return empty;
+  }
+  const email = normEmail(me?.email);
+  if (!email) {
+    inviteIndexCache = empty;
+    return empty;
+  }
+  try{
+    const snap = await getDoc(doc(db, "inviteIndex", email));
+    const data = snap?.data() || {};
+    const list = Array.isArray(data.projects) ? data.projects : [];
+    const names = data.projectNames && typeof data.projectNames === "object"
+      ? data.projectNames
+      : {};
+    inviteIndexCache = { ids: new Set(list.filter(Boolean)), names };
+    return inviteIndexCache;
+  }catch(err){
+    console.warn("invite index load failed", err);
+    inviteIndexCache = empty;
+    return empty;
+  }
+}
+function collectMemberEmails(map){
+  const out = [];
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== "object") return;
+    Object.entries(node).forEach(([key, value]) => {
+      if (value === true) {
+        out.push([...prefix, key].join("."));
+      } else if (value && typeof value === "object") {
+        walk(value, [...prefix, key]);
+      }
+    });
+  };
+  walk(map, []);
+  return out;
+}
+function hasMemberEmail(map, email){
+  const target = normEmail(email);
+  if (!target) return false;
+  if (map && map[target] === true) return true;
+  const list = collectMemberEmails(map);
+  return list.some((value) => normEmail(value) === target);
+}
+function hasMemberEmailList(list, email){
+  const target = normEmail(email);
+  if (!target || !Array.isArray(list)) return false;
+  return list.some((value) => normEmail(value) === target);
+}
+function canAccessProject(user, data){
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  const email = normEmail(user?.email);
+  if (email && normEmail(data?.ownerEmail) === email) return true;
+  if (email && hasMemberEmail(data?.memberEmails, email)) return true;
+  if (email && hasMemberEmailList(data?.memberEmailList, email)) return true;
+  const uid = user?.uid;
+  if (uid && Array.isArray(data?.members) && data.members.includes(uid)) return true;
+  if (uid && data?.roleByUid && data.roleByUid[uid]) return true;
+  return false;
+}
 const enc = encodeURIComponent(project);
 const editor = $("meetingEditor");
 
-$("toSheet").href = `${base}sheet.html?project=${encodeURIComponent(project)}`;
-document.querySelector('a[href="/admin.html"]')?.setAttribute("href", `${base}admin.html`);
-
-const f = document.getElementById("scheduleFrame");
-const open = document.getElementById("openSchedule");
-
-function setScheduleTheme() {
-  const scheduleTheme = getPreferredTheme();
-  if (f) {
-    f.src = `${base}schedule.html?embed=1&theme=${scheduleTheme}&project=${enc}`;
+async function initProjectSwitcher(){
+  if (!projectSwitcher) return;
+  if (!me) {
+    projectSwitcher.style.display = "none";
+    return;
   }
-  if (open) {
-    open.href = `${base}schedule.html?theme=${scheduleTheme}&project=${enc}`;
+
+  try{
+    const invitedIds = new Set();
+    let items = [];
+    if (isAdminUser(me)) {
+      const snap = await getDocs(collection(db, "projects"));
+      snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
+    } else {
+      const map = new Map();
+      const inviteInfo = await loadInviteIndex();
+      const projectIds = [...inviteInfo.ids];
+      if (projectIds.length) {
+        const docs = await Promise.all(
+          projectIds.map((pid) => getDoc(doc(db, "projects", pid)).catch(() => null))
+        );
+        docs.forEach((snap, idx) => {
+          const pid = projectIds[idx];
+          invitedIds.add(pid);
+          if (snap?.exists()) {
+            map.set(pid, { id: pid, ...(snap.data() || {}) });
+          } else {
+            const fallback = String(inviteInfo.names?.[pid] || "").trim();
+            map.set(pid, { id: pid, name: fallback || pid });
+          }
+        });
+      }
+      items = [...map.values()];
+    }
+    const allowed = items.filter((item) =>
+      !item.deleted && (canAccessProject(me, item) || invitedIds.has(item.id))
+    );
+    allowed.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
+    if (!allowed.length) {
+      projectSwitcher.style.display = "none";
+      return;
+    }
+
+    projectSwitcher.innerHTML = "";
+    allowed.forEach((item) => {
+      const opt = document.createElement("option");
+      opt.value = item.id;
+      opt.textContent = item.name || item.id;
+      projectSwitcher.appendChild(opt);
+    });
+
+    const current = allowed.find((item) => item.id === project);
+    const active = current || allowed[0];
+    if (active?.id) {
+      projectSwitcher.value = active.id;
+      if (projectPill) projectPill.textContent = active.name || active.id;
+      if (!current) {
+        location.replace(`${base}portal.html?project=${encodeURIComponent(active.id)}`);
+        return;
+      }
+    }
+    projectSwitcher.style.display = allowed.length > 1 ? "inline-flex" : "none";
+  }catch(err){
+    console.error(err);
+    projectSwitcher.style.display = "none";
   }
 }
 
-setScheduleTheme();
+projectSwitcher?.addEventListener("change", () => {
+  const next = projectSwitcher.value;
+  if (!next || next === project) return;
+  localStorage.setItem("lastProject", next);
+  location.href = `${base}portal.html?project=${encodeURIComponent(next)}`;
+});
+
+$("toSheet").href = `${base}sheet.html?project=${encodeURIComponent(project)}`;
+
+const f = document.getElementById("scheduleFrame");
+const open = document.getElementById("openSchedule");
+const scheduleSection = document.querySelector(".portalSchedule");
+let scheduleEnabled = false;
+const postScheduleTheme = (theme) => {
+  if (f?.contentWindow) {
+    f.contentWindow.postMessage({ type: "SET_THEME", theme }, "*");
+  }
+};
+
+function setScheduleTheme() {
+  if (!scheduleEnabled) return;
+  const scheduleTheme = document.documentElement.dataset.theme || getPreferredTheme();
+  const clientMode = "client=1";
+  if (f) {
+    f.src = `${base}schedule.html?embed=1&theme=${scheduleTheme}&${clientMode}&project=${enc}`;
+    postScheduleTheme(scheduleTheme);
+  }
+  if (open) {
+    open.href = `${base}schedule.html?theme=${scheduleTheme}&${clientMode}&project=${enc}`;
+  }
+}
+
+function setScheduleEnabled(enabled) {
+  scheduleEnabled = !!enabled;
+  if (scheduleSection) scheduleSection.style.display = scheduleEnabled ? "" : "none";
+  if (!scheduleEnabled && f) {
+    f.src = "about:blank";
+  }
+  if (scheduleEnabled) setScheduleTheme();
+}
+
+setScheduleEnabled(false);
+f?.addEventListener("load", () => {
+  const scheduleTheme = document.documentElement.dataset.theme || getPreferredTheme();
+  postScheduleTheme(scheduleTheme);
+});
 window.addEventListener("themechange", () => setScheduleTheme());
 
 const projectRef = doc(db,"projects",project);
@@ -50,13 +274,12 @@ let latestId = null;
 let latestDocCache = null;
 let lastLogs = [];
 
-const isAdmin = isAdminUser(me);
+const realAdmin = isAdminUser(me);
+let debugGuestMode = localStorage.getItem("debugGuestMode") === "1";
+let isAdmin = realAdmin && !debugGuestMode;
 const dropboxAdmin = document.getElementById("dropboxAdmin");
-if (dropboxAdmin) dropboxAdmin.style.display = isAdmin ? "flex" : "none";
 const referenceAdmin = document.getElementById("referenceAdmin");
-if (referenceAdmin) referenceAdmin.style.display = isAdmin ? "flex" : "none";
 const pdfAdmin = document.getElementById("pdfAdmin");
-if (pdfAdmin) pdfAdmin.style.display = isAdmin ? "flex" : "none";
 const referenceMsg = (t) => {
   const el = document.getElementById("referenceMsg");
   if (el) el.textContent = t || "";
@@ -70,31 +293,134 @@ const pdfMsg = (t) => {
 const editorWrap = document.querySelector(".portalEditor");
 const editorControls = document.querySelectorAll(".toolbar button");
 const meetingTitle = document.getElementById("meetingTitle");
-if (!isAdmin) {
-  editor?.setAttribute("contenteditable", "false");
-  editorControls.forEach((btn) => (btn.disabled = true));
-  meetingTitle && (meetingTitle.disabled = true);
-  document.getElementById("btnSave")?.setAttribute("disabled", "true");
-  document.getElementById("btnMeetingClear")?.setAttribute("disabled", "true");
-  editorWrap?.classList.add("readOnly");
+
+const memberRef = me?.uid
+  ? doc(db, "projects", project, "members", me.uid)
+  : null;
+
+async function ensureMemberDoc(){
+  if (isAdminUser(me)) return true;
+  if (!memberRef) return false;
+  try{
+    const snap = await getDoc(memberRef);
+    if (snap.exists()) return true;
+  }catch(err){
+    console.warn("member doc read failed", err);
+  }
+  try{
+    await setDoc(memberRef, {
+      email: me?.email || "",
+      joinedAt: serverTimestamp(),
+    });
+    return true;
+  }catch(err){
+    console.warn("member doc create failed", err);
+    return false;
+  }
 }
 
-const pSnap = await getDoc(projectRef);
-if (pSnap.exists()) {
+function updateGuestToggle(){
+  const row = document.getElementById("portalGuestRow");
+  if (row) row.style.display = realAdmin ? "flex" : "none";
+  const toggle = document.getElementById("togglePortalGuest");
+  if (toggle) {
+    toggle.checked = debugGuestMode;
+    toggle.disabled = !realAdmin;
+  }
+  const state = document.getElementById("portalGuestState");
+  if (state) state.textContent = debugGuestMode ? "ON" : "OFF";
+}
+
+function applyAdminMode(){
+  isAdmin = realAdmin && !debugGuestMode;
+  if (dropboxAdmin) dropboxAdmin.style.display = isAdmin ? "flex" : "none";
+  if (referenceAdmin) referenceAdmin.style.display = isAdmin ? "flex" : "none";
+  if (pdfAdmin) pdfAdmin.style.display = isAdmin ? "flex" : "none";
+  if (adminReturnLink) {
+    adminReturnLink.href = `${base}admin.html`;
+    adminReturnLink.style.display = realAdmin ? "inline-flex" : "none";
+  }
+
+  if (editor) editor.setAttribute("contenteditable", isAdmin ? "true" : "false");
+  editorControls.forEach((btn) => (btn.disabled = !isAdmin));
+  if (meetingTitle) meetingTitle.disabled = !isAdmin;
+  document.getElementById("btnSave")?.toggleAttribute("disabled", !isAdmin);
+  document.getElementById("btnMeetingClear")?.toggleAttribute("disabled", !isAdmin);
+  editorWrap?.classList.toggle("readOnly", !isAdmin);
+  updateGuestToggle();
+  renderReferences(referenceLinks);
+}
+
+applyAdminMode();
+
+document.getElementById("togglePortalGuest")?.addEventListener("change", (e) => {
+  if (!realAdmin) return;
+  debugGuestMode = !!e.target?.checked;
+  localStorage.setItem("debugGuestMode", debugGuestMode ? "1" : "0");
+  applyAdminMode();
+});
+
+const memberReady = await ensureMemberDoc();
+if (!memberReady) {
+  console.warn("member doc not ready");
+}
+
+let pSnap = null;
+let inviteInfo = null;
+let fallbackName = "";
+try {
+  pSnap = await getDoc(projectRef);
+} catch (err) {
+  if (err?.code === "permission-denied") {
+    inviteInfo = await loadInviteIndex();
+    if (inviteInfo?.ids?.has(project)) {
+      fallbackName = String(inviteInfo.names?.[project] || project).trim();
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      try {
+        pSnap = await getDoc(projectRef);
+      } catch (retryErr) {
+        console.warn("project doc retry failed", retryErr);
+        msg("このプロジェクトの閲覧権限がありません");
+        location.replace(guestUrl);
+        throw retryErr;
+      }
+    }
+  } else {
+    console.warn("project doc read failed", err);
+    msg("このプロジェクトの閲覧権限がありません");
+    location.replace(guestUrl);
+    throw err;
+  }
+}
+if (pSnap?.exists()) {
   const pdata = pSnap.data() || {};
   if (pdata.deleted) {
     alert("このプロジェクトは消去されています（管理者に連絡してください）");
     location.replace(`${base}admin.html`);
     throw new Error("deleted project");
   }
-  $("pTitle").textContent = pdata.name || project;
+  const name = pdata.name || project;
+  $("pTitle").textContent = name;
+  if (projectPill) projectPill.textContent = name;
+  setScheduleEnabled(canAccessProject(me, pdata));
+} else if (fallbackName) {
+  $("pTitle").textContent = fallbackName;
+  if (projectPill) projectPill.textContent = fallbackName;
+  setScheduleEnabled(true);
 } else {
-  $("pTitle").textContent = project;
+  location.replace(guestUrl);
+  throw new Error("project not found");
 }
+
+initProjectSwitcher();
 
 
 onSnapshot(portalRef, (snap)=>{
   const d = snap.exists() ? snap.data() : {};
+  portalUpdatedAt = d?.updatedAt || null;
+  portalUpdatedBy = d?.updatedBy || "";
+  updateHeaderUpdated();
   const link = (d?.dropboxLink || "").trim();
   const pdfLink = (d?.schedulePdfLink || "").trim();
   referenceLinks = Array.isArray(d?.referenceLinks)
@@ -125,14 +451,14 @@ onSnapshot(portalRef, (snap)=>{
 document.getElementById("btnSaveDropbox")?.addEventListener("click", async ()=>{
   if(!isAdmin){ msg("管理者のみ設定できます"); return; }
   const url = (document.getElementById("dropboxUrl")?.value || "").trim();
-  await setDoc(portalRef, { dropboxLink: url, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  await setDoc(portalRef, { dropboxLink: url, updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   msg("Dropboxリンクを保存しました");
   setTimeout(()=>msg(""), 1000);
 });
 
 document.getElementById("btnClearDropbox")?.addEventListener("click", async ()=>{
   if(!isAdmin){ msg("管理者のみ設定できます"); return; }
-  await setDoc(portalRef, { dropboxLink: "" , updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  await setDoc(portalRef, { dropboxLink: "" , updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   msg("Dropboxリンクをクリアしました");
   setTimeout(()=>msg(""), 1000);
 });
@@ -145,14 +471,14 @@ document.getElementById("btnSavePdf")?.addEventListener("click", async ()=>{
     pdfMsg("リンクの形式を確認してください");
     return;
   }
-  await setDoc(portalRef, { schedulePdfLink: url, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  await setDoc(portalRef, { schedulePdfLink: url, updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   pdfMsg("PDFリンクを保存しました");
   setTimeout(()=>pdfMsg(""), 1200);
 });
 
 document.getElementById("btnClearPdf")?.addEventListener("click", async ()=>{
   if(!isAdmin){ pdfMsg("管理者のみ設定できます"); return; }
-  await setDoc(portalRef, { schedulePdfLink: "" , updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  await setDoc(portalRef, { schedulePdfLink: "" , updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   pdfMsg("PDFリンクをクリアしました");
   setTimeout(()=>pdfMsg(""), 1200);
 });
@@ -173,7 +499,7 @@ document.getElementById("btnAddReference")?.addEventListener("click", async ()=>
     return;
   }
   const next = [...new Set([...referenceLinks, url])];
-  await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+  await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   const input = document.getElementById("referenceInput");
   if (input) input.value = "";
   referenceMsg("参考曲を追加しました");
@@ -365,6 +691,7 @@ function renderReferences(list){
     const actions = isAdmin
       ? `<button class="smallBtn ghost" type="button" data-act="removeReference" data-idx="${idx}">削除</button>`
       : "";
+    const openAttr = idx === 0 ? " open" : "";
     const embedHtml = embed
       ? `
         <div class="referenceEmbed" data-provider="${embed.provider}">
@@ -373,7 +700,7 @@ function renderReferences(list){
       `
       : "";
     return `
-      <details class="referenceItem">
+      <details class="referenceItem"${openAttr}>
         <summary>
           <span class="referenceTitle"><span class="tagPill">${label}</span>${safeUrl}</span>
           <span class="referenceActions">${actions}</span>
@@ -395,6 +722,9 @@ function renderReferences(list){
       }
     };
     details.addEventListener("toggle", onToggle);
+    if (details.open && !iframe.src) {
+      iframe.src = iframe.dataset.src || "";
+    }
   });
 
   host.onclick = async (e) => {
@@ -406,7 +736,7 @@ function renderReferences(list){
     const idx = Number(btn.dataset.idx);
     if (Number.isNaN(idx)) return;
     const next = referenceLinks.filter((_, i) => i !== idx);
-    await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: me.email || me.uid }, { merge:true });
+    await setDoc(portalRef, { referenceLinks: next, updatedAt: serverTimestamp(), updatedBy: whoName() }, { merge:true });
   };
 }
 
@@ -441,12 +771,12 @@ function buildPreviews(html){
   return `<div class="linkPreviewGrid">${cards}</div>`;
 }
 
-function canManageLog(user, d){
-  return isAdminUser(user);
+function canManageLog(){
+  return isAdmin;
 }
 
 function renderLogItem(d){
-  const by = d.createdBy || "";
+  const by = d.createdByName || d.createdBy || "";
   const at = d.createdAt?.toDate ? d.createdAt.toDate() : null;
   const t  = at ? at.toLocaleString() : "";
   const title = d.title || "打ち合わせメモ";
@@ -480,7 +810,7 @@ function renderLogs(all){
   latestDocCache = visible[0];
 
   const latest = renderLogItem(visible[0]);
-  latestMeta.textContent = `${latest.t}　${latest.by}`;
+  latestMeta.textContent = `${latest.title}　${latest.t}　${latest.by}`.trim();
   latestHost.innerHTML = `
     <div class="logMeta"><b>${escapeHtml(latest.title)}</b>${latest.archived ? ` <span class="muted">（アーカイブ）</span>` : ""}</div>
     <div class="logText">${latest.html}</div>
@@ -493,6 +823,11 @@ function renderLogs(all){
   }else{
     histHost.innerHTML = rest.map((x)=>{
       const it = renderLogItem(x);
+      const actions = (isAdmin && it.archived)
+        ? `<div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">
+             <button class="smallBtn danger" type="button" data-act="deleteLog" data-id="${x.id}">消去</button>
+           </div>`
+        : "";
       return `
         <details class="logToggle">
           <summary>
@@ -502,6 +837,7 @@ function renderLogs(all){
           <div class="logItem" style="margin-top:8px;">
             <div class="logText">${it.html}</div>
             ${typeof buildPreviews === "function" ? buildPreviews(it.html) : ""}
+            ${actions}
           </div>
         </details>
       `;
@@ -520,6 +856,9 @@ onSnapshot(qLogs, (snap)=>{
   const all = [];
   snap.forEach(docu => all.push({ id: docu.id, ...docu.data() }));
   lastLogs = all;
+  logUpdatedAt = all[0]?.createdAt || null;
+  logUpdatedBy = all[0]?.createdByName || all[0]?.createdBy || "";
+  updateHeaderUpdated();
   renderLogs(all);
 
 }, (err)=>{
@@ -531,6 +870,25 @@ document.getElementById("showArchived")?.addEventListener("change", () => {
   renderLogs(lastLogs);
 });
 
+document.getElementById("meetingHistory")?.addEventListener("click", async (e) => {
+  const btn = e.target?.closest("button[data-act='deleteLog']");
+  if (!btn) return;
+  if (!isAdmin) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const id = btn.dataset.id;
+  if (!id) return;
+  if (!confirm("このメモを消去しますか？（元に戻せません）")) return;
+  try{
+    await deleteDoc(doc(db, "projects", project, "portalLogs", id));
+    msg("消去しました");
+    setTimeout(()=>msg(""), 900);
+  }catch(e2){
+    console.error(e2);
+    msg(`消去失敗: ${e2.code || e2.message}`);
+  }
+});
+
 // 保存
 $("btnSave").addEventListener("click", async ()=>{
   if(!me){ msg("ログインしてね"); return; }
@@ -539,12 +897,18 @@ $("btnSave").addEventListener("click", async ()=>{
   const title = (titleEl?.value || "").trim() || "打ち合わせメモ";
   const html = editor.innerHTML || "";
   if(!html.trim()){ msg("空のメモは保存できないよ"); return; }
+  const createdByEmail = normEmail(me?.email || "");
+  if (!createdByEmail) {
+    msg("メールアドレスが取得できません");
+    return;
+  }
 
   await addDoc(logsCol, {
     title,
     meetingHtml: html,
     createdAt: serverTimestamp(),
-    createdBy: me.email || me.uid,
+    createdBy: createdByEmail,
+    createdByName: whoName(),
   });
 
   if (titleEl) titleEl.value = "";
@@ -564,7 +928,7 @@ document.getElementById("btnArchiveLatest")?.addEventListener("click", async ()=
     await updateDoc(ref, {
       archived: true,
       archivedAt: serverTimestamp(),
-      archivedBy: me.email || me.uid,
+      archivedBy: whoName(),
     });
     msg("アーカイブしました");
     setTimeout(()=>msg(""), 900);

@@ -1,6 +1,6 @@
 import { getParams } from "./ui_common";
 
-export function mountNav({ current = "", projectId = "" } = {}) {
+export function mountNav({ current = "", projectId = "", hideAdmin = false } = {}) {
   const nav = document.getElementById("nav");
   if (!nav) return;
 
@@ -15,8 +15,13 @@ export function mountNav({ current = "", projectId = "" } = {}) {
   const btn = (key, label) =>
     `<button type="button" class="navBtn${current === key ? " active" : ""}" data-go="${key}">${label}</button>`;
 
-  nav.innerHTML =
-    btn("admin", "管理") + btn("portal", "ポータル") + btn("sheet", "Music Sheet");
+  const items = [
+    btn("home", "Home"),
+    !hideAdmin ? btn("admin", "Admin") : "",
+    btn("portal", "Portal"),
+    btn("sheet", "Music Sheet"),
+  ].filter(Boolean);
+  nav.innerHTML = items.join("");
 
   nav.addEventListener(
     "click",
@@ -30,14 +35,16 @@ export function mountNav({ current = "", projectId = "" } = {}) {
       const go = b.dataset.go;
       let url =
         base +
-        (go === "admin"
-          ? "admin.html"
-          : go === "portal"
-            ? "portal.html"
-            : "sheet.html");
+        (go === "home"
+          ? "index.html"
+          : go === "admin"
+            ? "admin.html"
+            : go === "portal"
+              ? "portal.html"
+              : "sheet.html");
 
       let pid = p0;
-      if (go !== "admin") {
+      if (go === "portal" || go === "sheet") {
         if (!pid) {
           pid = prompt("プロジェクトIDを入力して開くよ（例：invisible-half）")?.trim();
           if (!pid) return;

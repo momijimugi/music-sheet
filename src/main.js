@@ -68,6 +68,49 @@ function fmtUpdated(d){
   return `${t} ${by}`.trim();
 }
 
+const lastUpdatedEl = $("lastUpdated");
+let lastCueUpdatedAt = null;
+let lastCueUpdatedBy = "";
+let lastUiUpdatedAt = null;
+let lastUiUpdatedBy = "";
+
+function tsValue(ts){
+  if (!ts) return 0;
+  if (ts?.seconds != null) return ts.seconds * 1000 + (ts.nanoseconds || 0) / 1e6;
+  if (ts instanceof Date) return ts.getTime();
+  return 0;
+}
+
+function setLastUpdated(ts, by){
+  if (!lastUpdatedEl) return;
+  if (!ts) {
+    lastUpdatedEl.textContent = "更新: --";
+    return;
+  }
+  const name = formatByName(by);
+  const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+  const t = d ? d.toLocaleString() : "";
+  const label = [t, name].filter(Boolean).join(" ");
+  lastUpdatedEl.textContent = `更新: ${label || "--"}`;
+}
+
+function formatByName(by){
+  const s = String(by || "").trim();
+  if (!s) return "";
+  if (s.includes("@")) return s.split("@")[0];
+  return s;
+}
+
+function updateHeaderUpdated(){
+  const cueVal = tsValue(lastCueUpdatedAt);
+  const uiVal = tsValue(lastUiUpdatedAt);
+  if (cueVal >= uiVal) {
+    setLastUpdated(lastCueUpdatedAt, lastCueUpdatedBy);
+  } else {
+    setLastUpdated(lastUiUpdatedAt, lastUiUpdatedBy);
+  }
+}
+
 function previewText(text, max = 40) {
   const s = String(text || "").replace(/\s+/g, " ").trim();
   if (!s) return "";
@@ -76,7 +119,7 @@ function previewText(text, max = 40) {
 
 function latestLogText(list) {
   const arr = Array.isArray(list) ? list : [];
-  const active = arr.filter((item) => !item?.archived);
+  const active = arr.filter((item) => !(item?.archived || item?.archivedAt));
   if (!active.length) return "";
   const latest = active.reduce((a, b) =>
     (a?.at?.seconds || 0) >= (b?.at?.seconds || 0) ? a : b
@@ -305,8 +348,7 @@ function renderStatusList(){
     const row = document.createElement("div");
     row.className = "statusRow";
     row.innerHTML = `
-      <input type="text" value="${s.label}" data-k="label" data-i="${idx}" placeholder="表示名" ${editable ? "" : "disabled"} />
-      <input type="text" value="${s.value}" data-k="value" data-i="${idx}" placeholder="保存値（英数推奨）" ${editable ? "" : "disabled"} />
+      <input type="text" value="${s.label || s.value || ""}" data-k="label" data-i="${idx}" placeholder="表示名" ${editable ? "" : "disabled"} />
       <input type="color" value="${s.color}" data-k="color" data-i="${idx}" ${editable ? "" : "disabled"} />
       <button class="smallBtn" data-act="del" data-i="${idx}" ${editable ? "" : "disabled"}>削除</button>
     `;
@@ -324,6 +366,11 @@ function renderStatusList(){
     const i = Number(t?.dataset?.i);
     const k = t?.dataset?.k;
     if(Number.isNaN(i) || !k) return;
+    if (k === "label") {
+      const v = t.value;
+      statuses[i] = { ...statuses[i], label: v, value: v };
+      return;
+    }
     statuses[i] = { ...statuses[i], [k]: t.value };
   };
 
@@ -345,7 +392,11 @@ async function saveStatuses(){
   }
   // value重複を軽くケア（空は消す）
   statuses = statuses
-    .map(s => ({...s, value:(s.value||"").trim(), label:(s.label||"").trim()}))
+    .map(s => {
+      const label = (s.label || s.value || "").trim();
+      const value = label;
+      return { ...s, label, value };
+    })
     .filter(s => s.value && s.label);
 
   const seen = new Set();
@@ -371,6 +422,11 @@ function listenUISettings(projectId){
   unsubUI = onSnapshot(ref, async (snap) => {
     if(snap.exists()){
       const d = snap.data();
+      if (d?.updatedAt) {
+        lastUiUpdatedAt = d.updatedAt;
+        lastUiUpdatedBy = d.updatedBy || "";
+        updateHeaderUpdated();
+      }
       if(Array.isArray(d.statuses) && d.statuses.length){
         statuses = d.statuses;
       }else{
@@ -480,6 +536,7 @@ let currentUser = null;
 // ===== project from URL =====
 const sp = new URLSearchParams(location.search);
 const urlProject = (sp.get("project") || "").trim();
+const urlCue = (sp.get("cue") || "").trim();
 if (urlProject) {
   $("projectId").value = urlProject;
   $("projectId").disabled = true;
@@ -488,6 +545,7 @@ if (urlProject) {
 let currentProjectId = $("projectId").value.trim();
 let unsub = null;
 let pendingSelectId = null;
+if (urlCue) pendingSelectId = urlCue;
 let projectNameLoaded = false;
 let scheduleUnsub = null;
 let scheduleNextMap = new Map();
@@ -509,10 +567,11 @@ const table = new Tabulator("#grid", {
       hozAlign: "center",
       headerSort: false,
       rowHandle: true,
+      frozen: true,
     },
-    { title: "#M", field: "m", width: 70, headerSort: true },
-    { title: "V", field: "v", width: 55, editor: "input", editable: () => canEditField("v") },
-    { title: "demo", field: "demo", width: 80, editor: "input", editable: () => canEditField("demo") },
+    { title: "#M", field: "m", width: 70, headerSort: true, frozen: true },
+    { title: "V", field: "v", width: 55, editor: "input", editable: () => canEditField("v"), frozen: true },
+    { title: "demo", field: "demo", width: 80, editor: "input", editable: () => canEditField("demo"), frozen: true },
     { title: "scene", field: "scene", minWidth: 180, editor: "input", editable: () => canEditField("scene") },
     { title:"長さ", field:"len", width:120,
       formatter:(cell)=>renderSelectCell(renderLenTag(cell.getValue())),
@@ -606,7 +665,7 @@ let bulkMode = false;
 let applying = false;
 const undoStack = [];
 const UNDO_MAX = 50;
-const BULK_FIELDS = new Set(["status", "len", "scene", "demo", "memo", "in", "out"]);
+const BULK_FIELDS = new Set(["status", "len", "scene", "demo", "in", "out"]);
 
 function updateBulkToggle(){
   const el = $("toggleBulk");
@@ -687,8 +746,10 @@ function applyPermissionUI(){
 
   const refInput = $("f_reference");
   if (refInput) refInput.disabled = !currentUser;
+  const refShared = $("f_reference_shared");
+  if (refShared) refShared.disabled = !currentUser;
 
-  ["f_memo", "f_len", "f_status", "f_note", "f_in", "f_out"].forEach((id) => {
+  ["f_len", "f_status", "f_note", "f_in", "f_out"].forEach((id) => {
     const el = $(id);
     if (el) el.disabled = guestView;
   });
@@ -806,9 +867,8 @@ table.on("cellEdited", async (cell) => {
       return;
     }
 
-    if (field === "reference" && selectedId === row.id && $("f_reference")) {
-      $("f_reference").value = value ?? "";
-      renderReferencePreview($("f_reference").value);
+    if (field === "reference" && selectedId === row.id) {
+      setReferenceValue(value ?? "");
     }
 
     const selectedRows = table.getSelectedRows().map((r) => r.getData()).filter((d) => d?.id);
@@ -895,8 +955,7 @@ function setInspector(row){
     renderCommentLog([]);
     $("f_director_new").value = "";
     $("f_comment_new").value = "";
-    if ($("f_reference")) $("f_reference").value = "";
-    renderReferencePreview("");
+    setReferenceValue("");
     $("f_in").value = "";
     $("f_out").value = "";
     $("f_interval").value = "";
@@ -905,9 +964,10 @@ function setInspector(row){
     const d = row.getData();
     selectedId = d.id;
     if ($("selMeta")) {
-      const memo = String(d.memo || "").trim();
-      const note = String(d.note || "").trim();
-      const label = [memo, note].find((v) => v) || "選択中の行";
+      const parts = [];
+      if (d.m != null && String(d.m).trim() !== "") parts.push(`#M ${d.m}`);
+      if (d.demo) parts.push(String(d.demo).trim());
+      const label = parts.length ? parts.join(" / ") : "選択中の行";
       $("selMeta").textContent = `選択中: ${label}`;
       $("selMeta").classList.remove("selMetaEmpty");
     }
@@ -917,10 +977,8 @@ function setInspector(row){
   if ($("f_scene")) $("f_scene").value = d.scene ?? "";
   $("f_status").value = d.status ?? "";
   $("f_len").value = d.len ?? "";
-  $("f_memo").value = d.memo ?? "";
   $("f_note").value = d.note ?? "";
-  if ($("f_reference")) $("f_reference").value = d.reference ?? "";
-  renderReferencePreview($("f_reference")?.value || "");
+  setReferenceValue(d.reference ?? "");
   $("f_in").value = d.in ?? "";
   $("f_out").value = d.out ?? "";
   const fps = (window.__FPS_DEFAULT__ || "24");
@@ -930,6 +988,36 @@ function setInspector(row){
   $("f_director_new").value = "";
   $("f_comment_new").value = "";
 }
+
+const inspectorTabs = Array.from(document.querySelectorAll(".insTab"));
+const inspectorPanels = Array.from(document.querySelectorAll(".insTabPanel"));
+
+function setInspectorTab(tabId, { persist = true } = {}) {
+  if (!tabId) return;
+  let found = false;
+  inspectorTabs.forEach((btn) => {
+    const active = btn.dataset.tab === tabId;
+    if (active) found = true;
+    btn.classList.toggle("is-active", active);
+  });
+  inspectorPanels.forEach((panel) => {
+    const active = panel.dataset.tab === tabId;
+    panel.classList.toggle("is-active", active);
+  });
+  if (found && persist) {
+    localStorage.setItem("inspectorTab", tabId);
+  }
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target?.closest?.(".insTab");
+  if (!btn) return;
+  const tabId = btn.dataset.tab;
+  setInspectorTab(tabId);
+});
+
+const storedTab = localStorage.getItem("inspectorTab");
+if (storedTab) setInspectorTab(storedTab, { persist: false });
 
 
 function extractUrls(text){
@@ -1066,8 +1154,7 @@ function formatReferenceCell(cell, formatterParams, onRendered){
   return buildReferenceCellHtml(raw, normalized, cachedTitle || "");
 }
 
-function renderReferencePreview(value){
-  const host = $("referencePreview");
+function renderReferencePreview(value, host = $("referencePreview")){
   if(!host) return;
   const raw = String(value || "").trim();
   const urls = extractUrls(raw);
@@ -1089,13 +1176,34 @@ function renderReferencePreview(value){
   host.innerHTML = `<a href="${link}" target="_blank" rel="noopener">リンクを開く</a>`;
 }
 
+function renderReferencePreviews(value){
+  renderReferencePreview(value, $("referencePreview"));
+  renderReferencePreview(value, $("referencePreviewShared"));
+}
+
+function setReferenceValue(value, sourceId){
+  const v = value ?? "";
+  const main = $("f_reference");
+  const shared = $("f_reference_shared");
+  if (main && main.id !== sourceId) main.value = v;
+  if (shared && shared.id !== sourceId) shared.value = v;
+  renderReferencePreviews(v);
+}
+
+function getReferenceValue(){
+  const el = $("f_reference") || $("f_reference_shared");
+  return el?.value || "";
+}
+
 function renderDirectorLog(list){
   const host = document.getElementById("directorLog");
   const showArchived = document.getElementById("showDirectorArchived")?.checked;
+  const rowMeta = selectedId ? table.getRow(selectedId)?.getData?.() : {};
+  const rowVersion = rowMeta?.v ? String(rowMeta.v).trim() : "";
 
   if(!host) return;
   const arr = Array.isArray(list) ? list.slice() : [];
-  const view = showArchived ? arr : arr.filter(x=>!x?.archived);
+  const view = showArchived ? arr : arr.filter(x=>!(x?.archived || x?.archivedAt));
 
   if(view.length === 0){
     host.innerHTML = `<div class="muted">まだFBはありません</div>`;
@@ -1113,9 +1221,15 @@ function renderDirectorLog(list){
       const at = item.at?.toDate ? item.at.toDate() : null;
       const t  = at ? at.toLocaleString() : "";
       const text = item.text || "";
-      const archived = !!item.archived;
+      const entryVersion = item?.v != null ? String(item.v).trim() : "";
+      const version = entryVersion || rowVersion;
+      const archived = !!item.archived || !!item.archivedAt;
       const action = archived ? "restoreDirector" : "archiveDirector";
       const actionLabel = archived ? "戻す" : "アーカイブ";
+      const metaParts = [];
+      if (version) metaParts.push(`V:${escapeHtml(version)}`);
+      if (t) metaParts.push(t);
+      if (by) metaParts.push(escapeHtml(by));
       const actions = canEdit
         ? `
           <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -1126,7 +1240,7 @@ function renderDirectorLog(list){
         : "";
       return `
         <div class="logItem">
-          <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
+          <div class="logMeta">${metaParts.join(" / ")}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
           ${actions}
@@ -1179,6 +1293,7 @@ function renderDirectorLog(list){
         updatedAt: serverTimestamp(),
         updatedBy: who(),
       });
+      table.updateData([{ id: selectedId, directorLog: list0 }]);
       renderDirectorLog(list0);
     }catch(e){
       console.error(e);
@@ -1191,10 +1306,12 @@ function renderDirectorLog(list){
 function renderCommentLog(list){
   const host = document.getElementById("commentLog");
   const showArchived = document.getElementById("showCommentArchived")?.checked;
+  const rowMeta = selectedId ? table.getRow(selectedId)?.getData?.() : {};
+  const rowVersion = rowMeta?.v ? String(rowMeta.v).trim() : "";
 
   if(!host) return;
   const arr = Array.isArray(list) ? list.slice() : [];
-  const view = showArchived ? arr : arr.filter(x=>!x?.archived);
+  const view = showArchived ? arr : arr.filter(x=>!(x?.archived || x?.archivedAt));
 
   if(view.length === 0){
     host.innerHTML = `<div class="muted">まだコメントはありません</div>`;
@@ -1212,9 +1329,15 @@ function renderCommentLog(list){
       const at = item.at?.toDate ? item.at.toDate() : null;
       const t  = at ? at.toLocaleString() : "";
       const text = item.text || "";
-      const archived = !!item.archived;
+      const entryVersion = item?.v != null ? String(item.v).trim() : "";
+      const version = entryVersion || rowVersion;
+      const archived = !!item.archived || !!item.archivedAt;
       const action = archived ? "restoreComment" : "archiveComment";
       const actionLabel = archived ? "戻す" : "アーカイブ";
+      const metaParts = [];
+      if (version) metaParts.push(`V:${escapeHtml(version)}`);
+      if (t) metaParts.push(t);
+      if (by) metaParts.push(escapeHtml(by));
       const actions = canEdit
         ? `
           <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
@@ -1225,7 +1348,7 @@ function renderCommentLog(list){
         : "";
       return `
         <div class="logItem">
-          <div class="logMeta">${t}　${escapeHtml(by)}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
+          <div class="logMeta">${metaParts.join(" / ")}${archived ? ' <span class="muted">（アーカイブ）</span>' : ""}</div>
           <div class="logText">${escapeHtml(text)}</div>
           ${buildLinkPreviews(text)}
           ${actions}
@@ -1278,6 +1401,7 @@ function renderCommentLog(list){
         updatedAt: serverTimestamp(),
         updatedBy: who(),
       });
+      table.updateData([{ id: selectedId, commentLog: list0 }]);
       renderCommentLog(list0);
     }catch(e){
       console.error(e);
@@ -1366,12 +1490,25 @@ function listen(projectId){
   const q = query(collection(db, "projects", projectId, "cues"), orderBy("m"));
   unsub = onSnapshot(q, (snap) => {
     const rows = [];
+    let latestAt = null;
+    let latestBy = "";
     snap.forEach(d => {
       const row = { id: d.id, ...d.data() };
       row.nextSchedule = scheduleNextMap.get(d.id) || null;
       rows.push(row);
+
+      const at = row.updatedAt;
+      if (tsValue(at) > tsValue(latestAt)) {
+        latestAt = at;
+        latestBy = row.updatedBy || "";
+      }
     });
     table.replaceData(rows);
+    if (latestAt) {
+      lastCueUpdatedAt = latestAt;
+      lastCueUpdatedBy = latestBy;
+      updateHeaderUpdated();
+    }
     if(pendingSelectId){
       const r = table.getRow(pendingSelectId);
       if(r){
@@ -1449,7 +1586,6 @@ $("btnAddRow").onclick = async () => {
       in: "",
       out: "",
       interval: "",
-      memo: "",
       note: "",
       createdAt: serverTimestamp(),
       createdBy: who(),
@@ -1530,7 +1666,7 @@ $("btnSaveDetail").onclick = async () => {
   const vValue = $("f_v") ? $("f_v").value.trim() : (rowData?.v ?? "");
   const demoValue = $("f_demo") ? $("f_demo").value.trim() : (rowData?.demo ?? "");
   const sceneValue = $("f_scene") ? $("f_scene").value.trim() : (rowData?.scene ?? "");
-  const referenceValue = ($("f_reference")?.value || "").trim();
+  const referenceValue = getReferenceValue().trim();
 
   const fullPatch = {
     m: mValue || null,
@@ -1539,7 +1675,6 @@ $("btnSaveDetail").onclick = async () => {
     scene: sceneValue || "",
     status: $("f_status").value.trim() || "",
     len: $("f_len").value.trim() || "",
-    memo: $("f_memo").value || "",
     note: $("f_note").value || "",
     reference: referenceValue,
     in: inTc,
@@ -1590,13 +1725,11 @@ $("btnAddDirectorFB")?.addEventListener("click", async ()=>{
   const row = table.getRow(selectedId);
   const cur = row?.getData?.() || {};
   const list = Array.isArray(cur.directorLog) ? cur.directorLog.slice() : [];
+  const version = cur?.v != null ? String(cur.v).trim() : "";
 
-  list.push({
-    text,
-    at: Timestamp.now(),
-    by: whoName,
-    archived: false,
-  });
+  const entry = { text, at: Timestamp.now(), by: whoName, archived: false };
+  if (version) entry.v = version;
+  list.push(entry);
 
   try{
     await updateDoc(ref, {
@@ -1605,6 +1738,7 @@ $("btnAddDirectorFB")?.addEventListener("click", async ()=>{
       updatedBy: whoName,
     });
     table.updateData([{ id: selectedId, directorLog: list }]);
+    renderDirectorLog(list);
     $("f_director_new").value = "";
     msg("FBを追加しました");
     setTimeout(()=>msg(""), 900);
@@ -1626,8 +1760,11 @@ $("btnAddComment")?.addEventListener("click", async ()=>{
   const row = table.getRow(selectedId);
   const cur = row?.getData?.() || {};
   const list = Array.isArray(cur.commentLog) ? cur.commentLog.slice() : [];
+  const version = cur?.v != null ? String(cur.v).trim() : "";
 
-  list.push({ text, at: Timestamp.now(), by: who(), archived: false });
+  const entry = { text, at: Timestamp.now(), by: who(), archived: false };
+  if (version) entry.v = version;
+  list.push(entry);
 
   try{
     await updateDoc(ref, {
@@ -1636,6 +1773,7 @@ $("btnAddComment")?.addEventListener("click", async ()=>{
       updatedBy: who(),
     });
     table.updateData([{ id: selectedId, commentLog: list }]);
+    renderCommentLog(list);
     $("f_comment_new").value = "";
     msg("コメントを追加しました");
     setTimeout(()=>msg(""), 900);
@@ -1768,8 +1906,13 @@ $("btnSaveStatuses")?.addEventListener("click", async () => {
 });
 
 $("f_status")?.addEventListener("change", updateStatusPreview);
-document.getElementById("f_reference")?.addEventListener("input", () => {
-  renderReferencePreview(document.getElementById("f_reference").value);
+document.getElementById("f_reference")?.addEventListener("input", (e) => {
+  const v = e.target?.value || "";
+  setReferenceValue(v, "f_reference");
+});
+document.getElementById("f_reference_shared")?.addEventListener("input", (e) => {
+  const v = e.target?.value || "";
+  setReferenceValue(v, "f_reference_shared");
 });
 
 

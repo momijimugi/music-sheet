@@ -800,6 +800,13 @@
       align-self: flex-start;
       margin-top: 2px;
     }
+    .row-header-cell.track-selected {
+      background: rgba(111,214,255,0.16);
+      border-left: 3px solid rgba(111,214,255,0.9);
+    }
+    .cell.track-selected {
+      box-shadow: inset 0 0 0 1px rgba(111,214,255,0.45);
+    }
 
 
     .cell {
@@ -1159,6 +1166,7 @@
       margin-left: auto;
       font-size: 0.8rem;
       color: var(--text-muted);
+      cursor: pointer;
     }
 
     .row-header-memo-btn {
@@ -1687,6 +1695,7 @@
       <div>
         <div class="section-label">ページ移動</div>
         <div class="sidebar-controls" id="navButtons">
+          <button class="btn btn-soft" data-nav-href="index.html"><span class="icon">🏠</span> Home</button>
           <button class="btn btn-soft" data-nav-href="portal.html"><span class="icon">🏠</span> Portal</button>
           <button class="btn btn-soft" data-nav-href="schedule.html"><span class="icon">🗓</span> Schedule</button>
           <button class="btn btn-soft" data-nav-href="tasks.html"><span class="icon">✅</span> Tasks</button>
@@ -1856,6 +1865,11 @@
     const FORCED_THEME = URL_PARAMS.get('theme'); // 'light' | 'dark' | null
     const SCOPE = URL_PARAMS.get('scope') || '';
     const IS_ALL_SCOPE = SCOPE === 'all';
+    const FORCE_CLIENT_VIEW =
+      URL_PARAMS.get('client') === '1' ||
+      URL_PARAMS.get('client') === 'true' ||
+      URL_PARAMS.get('view') === 'client';
+    const READ_ONLY = FORCE_CLIENT_VIEW && !IS_ALL_SCOPE;
     let PROJECT_ID = URL_PARAMS.get('project') || '';
     if (IS_EMBED) {
       document.querySelectorAll("[data-embed-hide]").forEach(el => {
@@ -1979,6 +1993,16 @@
       return `${projectId}__${trackId}`;
     }
 
+    function splitScopedTrackId(value) {
+      const raw = String(value || "");
+      const idx = raw.indexOf("__");
+      if (idx <= 0) return null;
+      const projectId = raw.slice(0, idx).trim();
+      const trackId = raw.slice(idx + 2).trim();
+      if (!projectId || !trackId) return null;
+      return { projectId, trackId };
+    }
+
     function mergeAllBoards(boards) {
       const baseState = loadStateOrInit();
       baseState.projects = [];
@@ -2079,6 +2103,9 @@
       if (!state.settings.theme) {
         state.settings.theme = detectPreferredTheme();
       }
+      if (FORCED_THEME === 'light' || FORCED_THEME === 'dark') {
+        state.settings.theme = FORCED_THEME;
+      }
       applyTheme(state.settings.theme);
       applyTagVisibility(state.settings.showProjectTags);
       selectedProjectId = state.projects[0]?.id || null;
@@ -2101,6 +2128,7 @@
 
     let selectedProjectId = null;
     let showOnlySelected = false;
+    let selectedTrackId = '';
 
     let selectedCells = new Set(); // "trackId|date"
     let isSelecting = false;
@@ -2129,7 +2157,7 @@
     let currentStatusFilter = 'ALL';
 
     // クライアントビュー
-    let clientViewMode = false;
+    let clientViewMode = FORCE_CLIENT_VIEW;
 
     // Undo スタック
     let undoStack = [];
@@ -2157,7 +2185,8 @@
         setTheme(FORCED_THEME);
       }
 
-      const user = await new Promise(resolve => onAuthStateChanged(auth, resolve));
+        const user = await new Promise(resolve => onAuthStateChanged(auth, resolve));
+        currentUser = user;
       if (!isAdminUser(user)) {
         document.body.innerHTML = "<p>管理者専用です</p>";
         return;
@@ -2294,8 +2323,14 @@
         state.settings.theme = detectPreferredTheme();
         saveState();
       }
+      if (FORCED_THEME === 'light' || FORCED_THEME === 'dark') {
+        state.settings.theme = FORCED_THEME;
+      }
       applyTheme(state.settings.theme);
       applyTagVisibility(state.settings.showProjectTags);
+      if (FORCE_CLIENT_VIEW) {
+        setClientViewMode(true);
+      }
     }
 
     (async ()=>{
@@ -2630,11 +2665,11 @@
       let status = track?.status || '';
       let len = track?.len || '';
       let pid = projectId || '';
-      if ((!status && !len) && sheetTrackMetaById.has(track.id)) {
-        const meta = sheetTrackMetaById.get(track.id);
-        status = status || meta.status || '';
-        len = len || meta.len || '';
-        pid = pid || meta.projectId || '';
+      const meta = sheetTrackMetaById.get(track.id);
+      if (meta) {
+        status = meta.status || status || '';
+        len = meta.len || len || '';
+        pid = meta.projectId || pid || '';
       }
       return { status, len, projectId: pid };
     }
@@ -2793,28 +2828,119 @@
         showTopError(`曲リスト同期エラー: ${err.code || err.message}`);
       });
     }
+    function buildAllScopePayloads() {
+      const scheduleByProject = new Map();
+      const notesByProject = new Map();
 
-function scheduleRemoteSave() {
-      if (!BOARD_DOC || !currentUser) return;
+      (state.projects || []).forEach((p) => {
+        if (!p?.id) return;
+        scheduleByProject.set(p.id, {});
+        notesByProject.set(p.id, {});
+      });
+
+      Object.entries(state.schedule || {}).forEach(([scopedId, sched]) => {
+        const info = splitScopedTrackId(scopedId);
+        if (!info) return;
+        if (!scheduleByProject.has(info.projectId)) {
+          scheduleByProject.set(info.projectId, {});
+        }
+        scheduleByProject.get(info.projectId)[info.trackId] = sched;
+      });
+
+      Object.entries(state.cellNotes || {}).forEach(([key, value]) => {
+        const parts = String(key).split("|");
+        const scopedId = parts.shift();
+        const info = splitScopedTrackId(scopedId);
+        if (!info) return;
+        const date = parts.join("|");
+        if (!notesByProject.has(info.projectId)) {
+          notesByProject.set(info.projectId, {});
+        }
+        notesByProject.get(info.projectId)[`${info.trackId}|${date}`] = value;
+      });
+
+      return { scheduleByProject, notesByProject };
+    }
+
+    function createEmptyBoardState(projectId) {
+      return normalizeImportedState({
+        projects: [{
+          id: projectId,
+          name: allProjectNameMap.get(projectId) || projectId,
+          color: "#62c3ff",
+          collapsed: false,
+          archived: false,
+          tracks: []
+        }],
+        schedule: {},
+        cellNotes: {},
+        statuses: DEFAULT_STATUSES.slice(),
+        daysToShow: DEFAULT_DAYS_TO_SHOW,
+        settings: {
+          cellWidth: 70,
+          cellHeight: 28,
+          heatmapEnabled: true,
+          showProjectTags: true,
+          theme: detectPreferredTheme()
+        }
+      });
+    }
+
+    function scheduleRemoteSave() {
       if (isApplyingRemote) return;
+
+      if (IS_ALL_SCOPE) {
+        if (!currentUser) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = setTimeout(async () => {
+          try {
+            const { scheduleByProject, notesByProject } = buildAllScopePayloads();
+            const tasks = [];
+            scheduleByProject.forEach((schedule, projectId) => {
+              const board = allBoardsCache.find((b) => b.projectId === projectId);
+              const payload = board?.state
+                ? JSON.parse(JSON.stringify(board.state))
+                : createEmptyBoardState(projectId);
+              payload.schedule = schedule;
+              payload.cellNotes = notesByProject.get(projectId) || {};
+
+              tasks.push(
+                setDoc(doc(db, "projects", projectId, "scheduleBoard", "state"), {
+                  state: payload,
+                  updatedAt: serverTimestamp(),
+                    updatedBy: currentUser?.displayName || currentUser?.email || currentUser?.uid || "",
+                  clientId: CLIENT_ID,
+                  version: 1
+                }, { merge: true })
+              );
+            });
+            await Promise.all(tasks);
+          } catch (e) {
+            console.error(e);
+          }
+        }, 400);
+        return;
+      }
+
+      if (!BOARD_DOC || !currentUser) return;
 
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(async () => {
         try {
-          // Firestoreに入れる用に最小化（案件固定）
+          // Firestore save for a single project board.
           const payload = JSON.parse(JSON.stringify(state));
           if (PROJECT_ID) {
             let p = (payload.projects || []).find(p => p.id === PROJECT_ID) || payload.projects?.[0];
             if (!p) {
               p = {
                 id: PROJECT_ID,
-                name: projectTitleCache || '（無題）',
-                color: '#62c3ff',
+                name: projectTitleCache || "Untitled",
+                color: "#62c3ff",
                 collapsed: false,
                 archived: false,
                 tracks: []
               };
-            } else if (projectTitleCache && (!p.name || p.name.includes('読み込み中') || p.name.includes('取得失敗'))) {
+            } else if (projectTitleCache && (!p.name || p.name.includes("?????") || p.name.includes("????"))) {
               p.name = projectTitleCache;
             }
             payload.projects = [p];
@@ -2823,7 +2949,7 @@ function scheduleRemoteSave() {
           await setDoc(BOARD_DOC, {
             state: payload,
             updatedAt: serverTimestamp(),
-            updatedBy: currentUser?.email || currentUser?.uid || '',
+            updatedBy: currentUser?.displayName || currentUser?.email || currentUser?.uid || "",
             clientId: CLIENT_ID,
             version: 1
           }, { merge: true });
@@ -3424,7 +3550,7 @@ function scheduleRemoteSave() {
           // 左: 行ヘッダー
           leftBody += `
             <tr>
-              <td class="row-header-cell">
+              <td class="row-header-cell" data-track-id="${track.id}">
                 <div class="row-header-inner">
                   <div class="row-header-main">
                     <div class="row-header-top">
@@ -3545,6 +3671,7 @@ function scheduleRemoteSave() {
       attachRowEvents();
       attachProjectGroupEvents();
       updateSelectionStyles();
+      updateSelectedTrackHighlight();
       applyStatusFilter(); // 工程フィルタ反映
     }
 
@@ -3587,12 +3714,7 @@ function scheduleRemoteSave() {
       root.style.setProperty('--cell-width', (cellWidth || 70) + 'px');
       root.style.setProperty('--cell-height', (cellHeight || 28) + 'px');
 
-      let fs = 0.68;
-      if (cellWidth < 60 || cellHeight < 26) fs = 0.62;
-      if (cellWidth < 40 || cellHeight < 22) fs = 0.56;
-      if (cellWidth < 30 || cellHeight < 18) fs = 0.5;
-      if (cellWidth < 24 || cellHeight < 16) fs = 0.46;
-      root.style.setProperty('--cell-font-size', fs + 'rem');
+      root.style.setProperty('--cell-font-size', '0.68rem');
 
       const colInput = document.getElementById('colWidthInput');
       const rowInput = document.getElementById('rowHeightInput');
@@ -3732,6 +3854,8 @@ function scheduleRemoteSave() {
           ev.stopPropagation();
           const projectId = title.dataset.projectId || '';
           const trackId = title.dataset.trackId || '';
+          selectedTrackId = trackId;
+          updateSelectedTrackHighlight();
           let cueId = trackId;
           if (projectId && cueId.startsWith(`${projectId}__`)) {
             cueId = cueId.slice(projectId.length + 2);
@@ -3790,21 +3914,46 @@ function scheduleRemoteSave() {
 
     function attachProjectGroupEvents() {
       document.querySelectorAll('.project-group-row').forEach(row => {
-        row.addEventListener('click', (e) => {
-          // 案件の締切ボタンをクリックしたときはトグルしない
-          if (e.target.closest('.project-deadline-btn')) return;
+        const projectId = row.dataset.projectId;
+        const project = projectId ? state.projects.find(p => p.id === projectId) : null;
 
-          const projectId = row.dataset.projectId;
-          if (!projectId) return;
+        const toggle = row.querySelector('.project-group-toggle');
+        if (toggle) {
+          toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!project) return;
+            pushUndo();
+            project.collapsed = !project.collapsed;
+            saveState();
+            renderGrid(); // グリッドのみ再描画
+          });
+        }
 
-          const project = state.projects.find(p => p.id === projectId);
-          if (!project) return;
+        const name = row.querySelector('.project-group-name');
+        if (name) {
+          name.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!IS_EMBED || !window.parent || window.parent === window) return;
+            if (!projectId) return;
+            const payload = {
+              type: 'SCHEDULE_PROJECT_SELECT',
+              projectId,
+              projectName: project?.name || name.textContent || ''
+            };
+            window.parent.postMessage(payload, '*');
+          });
+        }
+      });
+    }
 
-          pushUndo();
-          project.collapsed = !project.collapsed;
-          saveState();
-          renderGrid(); // グリッドのみ再描画
-        });
+    function updateSelectedTrackHighlight() {
+      document.querySelectorAll('.row-header-cell').forEach(el => {
+        const match = selectedTrackId && el.dataset.trackId === selectedTrackId;
+        el.classList.toggle('track-selected', match);
+      });
+      document.querySelectorAll('.cell').forEach(el => {
+        const match = selectedTrackId && el.dataset.trackId === selectedTrackId;
+        el.classList.toggle('track-selected', match);
       });
     }
 
@@ -3836,6 +3985,11 @@ function scheduleRemoteSave() {
       const key = cellKey(trackId, date);
 
       hideContextMenu();
+
+      if (trackId && selectedTrackId !== trackId) {
+        selectedTrackId = trackId;
+        updateSelectedTrackHighlight();
+      }
 
       if (ev.altKey) {
         const trackSchedule = state.schedule[trackId] || {};
@@ -4052,6 +4206,7 @@ function scheduleRemoteSave() {
     }
 
     function handleContextMenuEvent(ev) {
+      if (READ_ONLY) return;
       const cell = ev.target.closest('.cell');
       if (!cell) {
         hideContextMenu();
@@ -4072,6 +4227,7 @@ function scheduleRemoteSave() {
     }
 
     function copySelectionToClipboard() {
+      if (READ_ONLY) return;
       let coords = getSelectedCellCoords();
 
       if (!coords.length && lastFocusedCell && currentRows.length && currentDates.length) {
@@ -4105,6 +4261,7 @@ function scheduleRemoteSave() {
     }
 
     function pasteClipboardAtAnchor(anchorOverride) {
+      if (READ_ONLY) return;
       if (!clipboardData) return;
 
       let anchor = anchorOverride || lastFocusedCell;
@@ -4149,6 +4306,7 @@ function scheduleRemoteSave() {
     }
 
     function clearSelectedCells() {
+      if (READ_ONLY) return;
       let coords = getSelectedCellCoords();
 
       if (!coords.length && lastFocusedCell && currentRows.length && currentDates.length) {
@@ -4346,20 +4504,25 @@ function scheduleRemoteSave() {
     }
 
     function setClientViewMode(on) {
-      clientViewMode = on;
-      document.body.classList.toggle('client-view-mode', on);
+      clientViewMode = FORCE_CLIENT_VIEW ? true : on;
+      document.body.classList.toggle('client-view-mode', clientViewMode);
       updateClientViewUI();
     }
 
     function updateClientViewUI() {
       const btn = document.getElementById('clientViewToggleBtn');
       if (btn) {
-        if (clientViewMode) {
-          btn.classList.add('active');
-          btn.textContent = '👁 通常ビューに戻る';
+        if (FORCE_CLIENT_VIEW) {
+          btn.style.display = 'none';
         } else {
-          btn.classList.remove('active');
-          btn.textContent = '👁 クライアントビュー';
+          btn.style.display = '';
+          if (clientViewMode) {
+            btn.classList.add('active');
+            btn.textContent = '👁 通常ビューに戻る';
+          } else {
+            btn.classList.remove('active');
+            btn.textContent = '👁 クライアントビュー';
+          }
         }
       }
 
@@ -4367,8 +4530,12 @@ function scheduleRemoteSave() {
       if (banner) {
         banner.classList.toggle('hidden', !clientViewMode);
       }
-    }
 
+      const backBtn = document.getElementById('clientViewBackBtn');
+      if (backBtn) {
+        backBtn.style.display = FORCE_CLIENT_VIEW ? 'none' : '';
+      }
+    }
 
     function applyStatusFilter() {
       const cells = document.querySelectorAll('.cell');
@@ -4585,12 +4752,15 @@ function scheduleRemoteSave() {
       });
 
       // クライアントビュー
-      document.getElementById('clientViewToggleBtn').addEventListener('click', () => {
-        setClientViewMode(!clientViewMode);
-      });
+      const clientViewToggleBtn = document.getElementById('clientViewToggleBtn');
+      if (clientViewToggleBtn && !FORCE_CLIENT_VIEW) {
+        clientViewToggleBtn.addEventListener('click', () => {
+          setClientViewMode(!clientViewMode);
+        });
+      }
 
       const clientViewBackBtn = document.getElementById('clientViewBackBtn');
-      if (clientViewBackBtn) {
+      if (clientViewBackBtn && !FORCE_CLIENT_VIEW) {
         clientViewBackBtn.addEventListener('click', () => {
           setClientViewMode(false);
         });
@@ -4628,12 +4798,20 @@ function scheduleRemoteSave() {
           return;
         }
 
+        if (READ_ONLY && meta && (ev.key === 'c' || ev.key === 'C')) {
+          ev.preventDefault();
+          return;
+        }
         if (meta && (ev.key === 'c' || ev.key === 'C')) {
           ev.preventDefault();
           copySelectionToClipboard();
           return;
         }
 
+        if (READ_ONLY && meta && (ev.key === 'v' || ev.key === 'V')) {
+          ev.preventDefault();
+          return;
+        }
         if (meta && (ev.key === 'v' || ev.key === 'V')) {
           ev.preventDefault();
           pasteClipboardAtAnchor();
@@ -4647,6 +4825,10 @@ function scheduleRemoteSave() {
           return;
         }
 
+        if (READ_ONLY && (ev.key === 'Delete' || ev.key === 'Backspace')) {
+          ev.preventDefault();
+          return;
+        }
         if ((ev.key === 'Delete' || ev.key === 'Backspace')) {
           if (inTextField) return;
           ev.preventDefault();

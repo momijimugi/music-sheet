@@ -10,6 +10,7 @@
     <div class="brand">Admin</div>
     <div id="nav" class="nav"></div>
     <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
       <span id="userPill" class="pill">未ログイン</span>
       <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
       <button id="btnLogin">Googleでログイン</button>
@@ -23,11 +24,39 @@
         <div class="card-head">
           <h2>プロジェクト作成</h2>
         </div>
-        <div class="row2 adminCreateRow">
+        <div class="adminCreateRow">
           <input id="newName" placeholder="プロジェクト名" />
           <button id="btnCreate">作成</button>
         </div>
         <div id="msg" class="muted"></div>
+
+        <div class="adminSectionDivider"></div>
+
+        <div class="card-head adminSubHead">
+          <h3>メンバー管理</h3>
+          <span id="memberMsg" class="muted"></span>
+        </div>
+
+        <div class="adminMemberBody">
+          <div class="adminMemberRow">
+            <div class="muted">対象プロジェクト</div>
+            <select id="memberProjectPicker" class="select"></select>
+
+            <button id="btnInitProjectDoc" class="ghost">このプロジェクトを初期化（owner/member）</button>
+            <a id="btnCopyInvite" class="btnLink" href="javascript:void(0)">招待リンクをコピー</a>
+          </div>
+
+          <div class="muted">ownerEmail</div>
+          <div id="ownerEmailView" class="pill">?</div>
+
+          <div class="muted">メンバー（memberEmails）</div>
+          <div id="memberList" class="adminMemberList"></div>
+
+          <div class="adminMemberRow">
+            <input id="memberEmailInput" class="search" placeholder="追加するメール（例: client@gmail.com）" />
+            <button id="btnAddMember" class="tbPrimary">追加</button>
+          </div>
+        </div>
       </section>
 
       <section class="card pad adminList">
@@ -37,34 +66,6 @@
         <div id="list" class="list"></div>
       </section>
     </div>
-
-    <section class="card pad adminMembers">
-      <div class="card-head">
-        <h2>メンバー管理</h2>
-        <span id="memberMsg" class="muted"></span>
-      </div>
-
-      <div class="adminMemberBody">
-        <div class="adminMemberRow">
-          <div class="muted">対象プロジェクト</div>
-          <select id="memberProjectPicker" class="select"></select>
-
-          <button id="btnInitProjectDoc" class="ghost">このプロジェクトを初期化（owner/member）</button>
-          <a id="btnCopyInvite" class="btnLink" href="javascript:void(0)">招待リンクをコピー</a>
-        </div>
-
-        <div class="muted">ownerEmail</div>
-        <div id="ownerEmailView" class="pill">?</div>
-
-        <div class="muted">メンバー（memberEmails）</div>
-        <div id="memberList" class="adminMemberList"></div>
-
-        <div class="adminMemberRow">
-          <input id="memberEmailInput" class="search" placeholder="追加するメール（例: client@gmail.com）" />
-          <button id="btnAddMember" class="tbPrimary">追加</button>
-        </div>
-      </div>
-    </section>
 
     <section class="card pad adminSchedule">
       <div class="card-head">
@@ -81,6 +82,7 @@
           <div class="muted">選択中の曲</div>
           <div id="scheduleSelectionTitle" class="title">未選択</div>
           <div id="scheduleSelectionMeta" class="muted"></div>
+          <a id="scheduleToSheet" class="btnLink scheduleToSheet" style="display:none;">Music Sheetへ</a>
 
           <div class="adminLogBlock">
             <div class="muted">監督FB</div>
@@ -93,6 +95,12 @@
           <div class="adminLogBlock">
             <div class="muted">参考曲</div>
             <div id="scheduleReferencePreview" class="referencePreview"></div>
+          </div>
+          <div class="adminLogBlock">
+            <div class="muted">打ち合わせメモ（最新）</div>
+            <div id="scheduleMeetingTitle" class="title"></div>
+            <div id="scheduleMeetingMeta" class="muted"></div>
+            <div id="scheduleMeetingLog" class="logBox"></div>
           </div>
         </aside>
       </div>

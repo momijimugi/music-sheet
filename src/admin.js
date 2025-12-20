@@ -6,11 +6,17 @@ import { auth, db, provider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
+  collectionGroup,
   deleteField,
+  deleteDoc,
   doc,
+  FieldPath,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -31,6 +37,49 @@ function isAdmin(user) {
 
 const $ = (id) => document.getElementById(id);
 const msg = (t) => ($("msg").textContent = t || "");
+const whoName = () => currentUser?.displayName || currentUser?.email || currentUser?.uid || "";
+const lastUpdatedEl = $("lastUpdated");
+let projectUpdatedAt = null;
+let projectUpdatedBy = "";
+let scheduleUpdatedAt = null;
+let scheduleUpdatedBy = "";
+
+function tsValue(ts){
+  if (!ts) return 0;
+  if (ts?.seconds != null) return ts.seconds * 1000 + (ts.nanoseconds || 0) / 1e6;
+  if (ts instanceof Date) return ts.getTime();
+  return 0;
+}
+
+function setLastUpdated(ts, by){
+  if (!lastUpdatedEl) return;
+  if (!ts) {
+    lastUpdatedEl.textContent = "更新: --";
+    return;
+  }
+  const name = formatByName(by);
+  const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null);
+  const t = d ? d.toLocaleString() : "";
+  const label = [t, name].filter(Boolean).join(" ");
+  lastUpdatedEl.textContent = `更新: ${label || "--"}`;
+}
+
+function formatByName(by){
+  const s = String(by || "").trim();
+  if (!s) return "";
+  if (s.includes("@")) return s.split("@")[0];
+  return s;
+}
+
+function updateHeaderUpdated(){
+  const projVal = tsValue(projectUpdatedAt);
+  const schedVal = tsValue(scheduleUpdatedAt);
+  if (schedVal >= projVal) {
+    setLastUpdated(scheduleUpdatedAt, scheduleUpdatedBy);
+  } else {
+    setLastUpdated(projectUpdatedAt, projectUpdatedBy);
+  }
+}
 
 const $m = (id) => document.getElementById(id);
 const memberMsg = (t) => {
@@ -40,9 +89,79 @@ const memberMsg = (t) => {
 
 const scheduleTitle = $("scheduleSelectionTitle");
 const scheduleMeta = $("scheduleSelectionMeta");
+const scheduleToSheet = $("scheduleToSheet");
 const scheduleDirectorLog = $("scheduleDirectorLog");
 const scheduleCommentLog = $("scheduleCommentLog");
 const scheduleReferencePreview = $("scheduleReferencePreview");
+const scheduleMeetingTitle = $("scheduleMeetingTitle");
+const scheduleMeetingMeta = $("scheduleMeetingMeta");
+const scheduleMeetingLog = $("scheduleMeetingLog");
+
+let meetingMemoUnsub = null;
+
+function renderMeetingMemoEmpty(message) {
+  if (scheduleMeetingTitle) scheduleMeetingTitle.textContent = "";
+  if (scheduleMeetingMeta) scheduleMeetingMeta.textContent = "";
+  if (scheduleMeetingLog) {
+    scheduleMeetingLog.innerHTML = `<div class="muted">${message || "まだメモがありません"}</div>`;
+  }
+}
+
+function updateScheduleSheetLink(projectId, cueId) {
+  if (!scheduleToSheet) return;
+  if (!projectId) {
+    scheduleToSheet.style.display = "none";
+    scheduleToSheet.removeAttribute("href");
+    return;
+  }
+  const href = cueId
+    ? `${base}sheet.html?project=${encodeURIComponent(projectId)}&cue=${encodeURIComponent(cueId)}`
+    : `${base}sheet.html?project=${encodeURIComponent(projectId)}`;
+  scheduleToSheet.href = href;
+  scheduleToSheet.style.display = "inline-flex";
+}
+
+function renderMeetingMemo(docData) {
+  const title = docData?.title || "打ち合わせメモ";
+  const html = docData?.meetingHtml || "";
+  const at = docData?.createdAt?.toDate ? docData.createdAt.toDate() : null;
+  const t = at ? at.toLocaleString() : "";
+  const by = formatByName(docData?.createdBy || "");
+  if (scheduleMeetingTitle) scheduleMeetingTitle.textContent = title;
+  if (scheduleMeetingMeta) scheduleMeetingMeta.textContent = [t, by].filter(Boolean).join(" ");
+  if (scheduleMeetingLog) {
+    scheduleMeetingLog.innerHTML = html
+      ? `<div class="logText">${html}</div>`
+      : `<div class="muted">本文がありません</div>`;
+  }
+}
+
+function listenLatestMeetingMemo(projectId) {
+  if (meetingMemoUnsub) {
+    meetingMemoUnsub();
+    meetingMemoUnsub = null;
+  }
+  if (!projectId) {
+    renderMeetingMemoEmpty("案件を選択してください");
+    return;
+  }
+  renderMeetingMemoEmpty("読み込み中...");
+  const q = query(
+    collection(db, "projects", projectId, "portalLogs"),
+    orderBy("createdAt", "desc"),
+    limit(1)
+  );
+  meetingMemoUnsub = onSnapshot(q, (snap) => {
+    if (snap.empty) {
+      renderMeetingMemoEmpty("まだメモがありません");
+      return;
+    }
+    renderMeetingMemo(snap.docs[0]?.data?.() || {});
+  }, (err) => {
+    console.error(err);
+    renderMeetingMemoEmpty("読み込みに失敗しました");
+  });
+}
 
 function escapeHtml(s) {
   return String(s || "")
@@ -187,9 +306,11 @@ function flattenLogs(cues, key) {
 async function loadScheduleLogs(payload = {}) {
   let { projectId, projectName, trackId, trackName, cueId } = payload;
   const scoped = splitScopedTrackId(trackId);
-  if (!projectId && scoped?.projectId) projectId = scoped.projectId;
-  if (!cueId && scoped?.cueId) cueId = scoped.cueId;
+  if (scoped?.projectId) projectId = scoped.projectId;
+  if (scoped?.cueId) cueId = scoped.cueId;
   if (!projectId) return;
+  listenLatestMeetingMemo(projectId);
+  updateScheduleSheetLink(projectId, cueId);
   const requestId = ++scheduleSelectionToken;
   const displayName = trackName || "選択中の曲";
   if (scheduleTitle) {
@@ -255,7 +376,7 @@ async function loadScheduleLogs(payload = {}) {
   const keyword = normalizeLabel(keywordRaw);
   const mMatch = keywordRaw.match(/#\s*(\d+)/);
   const mFromName = mMatch ? mMatch[1] : null;
-  if (keyword) {
+  if (keyword || mFromName) {
     const matches = cues.filter((cue) => {
       const label = normalizeLabel(buildCueLabel(cue));
       if (label && label === keyword) return true;
@@ -274,7 +395,7 @@ async function loadScheduleLogs(payload = {}) {
       if (mFromName && String(cue.m ?? "") === mFromName) return true;
       return false;
     });
-    if (matches.length) filtered = matches;
+    filtered = matches;
   }
 
   if (scheduleMeta) {
@@ -313,10 +434,180 @@ function baseUrl() {
   return import.meta.env.BASE_URL || "/";
 }
 
+function collectMemberEmails(map) {
+  const out = [];
+  const walk = (node, prefix) => {
+    if (!node || typeof node !== "object") return;
+    Object.entries(node).forEach(([key, value]) => {
+      if (value === true) {
+        out.push([...prefix, key].join("."));
+      } else if (value && typeof value === "object") {
+        walk(value, [...prefix, key]);
+      }
+    });
+  };
+  walk(map, []);
+  return [...new Set(out)];
+}
+
+function hasMemberEmail(map, email) {
+  const target = normEmail(email);
+  if (!target) return false;
+  if (map && map[target] === true) return true;
+  const list = collectMemberEmails(map);
+  return list.some((value) => normEmail(value) === target);
+}
+
+function memberEmailField(email) {
+  return new FieldPath("memberEmails", email);
+}
+
+function inviteDoc(projectId, email) {
+  const key = normEmail(email);
+  if (!key) return null;
+  return doc(db, "projects", projectId, "invites", key);
+}
+
+function inviteIndexRef(email) {
+  const key = normEmail(email);
+  if (!key) return null;
+  return doc(db, "inviteIndex", key);
+}
+
+async function ensureInvite(projectId, email, by, projectName) {
+  const ref = inviteDoc(projectId, email);
+  if (!ref) return;
+  const byName = by || whoName();
+  let resolvedName = String(
+    projectName || projectNameCache.get(projectId) || ""
+  ).trim();
+  if (!resolvedName) {
+    try {
+      const snap = await getDoc(doc(db, "projects", projectId));
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        resolvedName = String(data.name || data.projectName || data.title || "").trim();
+      }
+    } catch (err) {
+      console.warn("project name fetch failed", err);
+    }
+  }
+  try {
+    await setDoc(ref, {
+      email: normEmail(email),
+      createdAt: serverTimestamp(),
+      createdBy: byName,
+    }, { merge: true });
+    const indexRef = inviteIndexRef(email);
+    if (indexRef) {
+      await setDoc(indexRef, {
+        projects: arrayUnion(projectId),
+        updatedAt: serverTimestamp(),
+        updatedBy: byName,
+      }, { merge: true });
+      if (resolvedName) {
+        try {
+          await updateDoc(indexRef, {
+            [`projectNames.${projectId}`]: resolvedName,
+            updatedAt: serverTimestamp(),
+            updatedBy: byName,
+          });
+        } catch (err) {
+          try {
+            await setDoc(indexRef, {
+              projectNames: { [projectId]: resolvedName },
+              updatedAt: serverTimestamp(),
+              updatedBy: byName,
+            }, { merge: true });
+          } catch (inner) {
+            console.warn("invite index name update failed", inner);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("invite create failed", err);
+  }
+}
+
+async function syncInviteIndexProjectName(projectId, name) {
+  const resolvedName = String(name || "").trim();
+  if (!resolvedName) return;
+  try {
+    const snap = await getDoc(doc(db, "projects", projectId));
+    if (!snap.exists()) return;
+    const data = snap.data() || {};
+    const list = Array.isArray(data.memberEmailList) ? data.memberEmailList : [];
+    const emails = mergeMemberEmails(data.memberEmails || {}, list);
+    const byName = whoName();
+
+    await Promise.all(
+      emails.map((email) => {
+        const indexRef = inviteIndexRef(email);
+        if (!indexRef) return null;
+        return updateDoc(indexRef, {
+          [`projectNames.${projectId}`]: resolvedName,
+          updatedAt: serverTimestamp(),
+          updatedBy: byName,
+        }).catch(async () => {
+          await setDoc(indexRef, {
+            projectNames: { [projectId]: resolvedName },
+            updatedAt: serverTimestamp(),
+            updatedBy: byName,
+          }, { merge: true });
+        });
+      })
+    );
+  } catch (err) {
+    console.warn("invite index name sync failed", err);
+  }
+}
+
+async function removeProjectFromInviteIndex(projectId, projectData) {
+  try {
+    const list = Array.isArray(projectData?.memberEmailList) ? projectData.memberEmailList : [];
+    const emails = mergeMemberEmails(projectData?.memberEmails || {}, list);
+    const byName = whoName();
+
+    await Promise.all(
+      emails.map((email) => {
+        const indexRef = inviteIndexRef(email);
+        if (!indexRef) return null;
+        return updateDoc(indexRef, {
+          projects: arrayRemove(projectId),
+          updatedAt: serverTimestamp(),
+          updatedBy: byName,
+          [`projectNames.${projectId}`]: deleteField(),
+        }).catch(async () => {
+          await setDoc(indexRef, {
+            projects: arrayRemove(projectId),
+            updatedAt: serverTimestamp(),
+            updatedBy: byName,
+          }, { merge: true });
+        });
+      })
+    );
+  } catch (err) {
+    console.warn("invite index remove failed", err);
+  }
+}
+
+function mergeMemberEmails(map, list) {
+  const set = new Set(collectMemberEmails(map));
+  if (Array.isArray(list)) {
+    list.forEach((email) => {
+      const norm = normEmail(email);
+      if (norm) set.add(norm);
+    });
+  }
+  return [...set];
+}
+
 let currentUser = null;
 let initDone = false;
 let memberUnsub = null;
 let currentMemberProjectId = "";
+const projectNameCache = new Map();
 let scheduleSelectionToken = 0;
 
 mountNav({ current: "admin" });
@@ -325,16 +616,26 @@ window.addEventListener("themechange", () => setScheduleFrameAll());
 renderScheduleLog(scheduleDirectorLog, [], "曲名をクリックすると表示されます");
 renderScheduleLog(scheduleCommentLog, [], "曲名をクリックすると表示されます");
 renderScheduleReference([], "曲名をクリックすると表示されます");
+renderMeetingMemoEmpty("案件名をクリックすると表示されます");
+updateScheduleSheetLink(null);
 
 window.addEventListener("message", (event) => {
   const data = event.data;
-  if (!data || data.type !== "SCHEDULE_TRACK_SELECT") return;
-  loadScheduleLogs(data).catch((err) => {
-    console.error(err);
-    renderScheduleLog(scheduleDirectorLog, [], "読み込みに失敗しました");
-    renderScheduleLog(scheduleCommentLog, [], "読み込みに失敗しました");
-    renderScheduleReference([], "読み込みに失敗しました");
-  });
+  if (!data) return;
+  if (data.type === "SCHEDULE_TRACK_SELECT") {
+    loadScheduleLogs(data).catch((err) => {
+      console.error(err);
+      renderScheduleLog(scheduleDirectorLog, [], "読み込みに失敗しました");
+      renderScheduleLog(scheduleCommentLog, [], "読み込みに失敗しました");
+      renderScheduleReference([], "読み込みに失敗しました");
+    });
+    return;
+  }
+  if (data.type === "SCHEDULE_PROJECT_SELECT") {
+    const pid = data.projectId || "";
+    listenLatestMeetingMemo(pid);
+    updateScheduleSheetLink(pid, null);
+  }
 });
 
 $("btnLogin")?.addEventListener("click", async () => {
@@ -378,7 +679,19 @@ function mountMemberManager(projectId) {
     $m("ownerEmailView").textContent = d.ownerEmail || "—";
 
     const mem = d.memberEmails || {};
-    const emails = Object.keys(mem).filter((k) => mem[k] === true).sort();
+    const list = Array.isArray(d.memberEmailList) ? d.memberEmailList : [];
+    const emails = mergeMemberEmails(mem, list).sort();
+    const missing = emails.filter((email) => mem[email] !== true);
+    const listMissing = emails.filter((email) => !list.includes(email));
+    if ((missing.length || listMissing.length) && currentUser) {
+      const updates = [];
+      missing.forEach((email) => updates.push(memberEmailField(email), true));
+      if (listMissing.length) updates.push("memberEmailList", emails);
+      updates.push("updatedAt", serverTimestamp(), "updatedBy", whoName());
+      updateDoc(projectRef, ...updates).catch((err) => {
+        console.warn("memberEmails normalize failed", err);
+      });
+    }
 
     if (emails.length === 0) {
       $m("memberList").innerHTML = `<div class="muted">メンバーがまだいません</div>`;
@@ -411,11 +724,49 @@ function mountMemberManager(projectId) {
 
     try {
       const ref = doc(db, "projects", projectId);
-      await updateDoc(ref, {
-        [`memberEmails.${email}`]: deleteField(),
-        updatedAt: serverTimestamp(),
-        updatedBy: currentUser?.email || currentUser?.uid || "",
-      });
+      await updateDoc(
+        ref,
+        memberEmailField(email),
+        deleteField(),
+        "memberEmailList",
+        arrayRemove(email),
+        "updatedAt",
+        serverTimestamp(),
+        "updatedBy",
+        whoName()
+      );
+      try {
+        await updateDoc(ref, { [`memberEmails.${email}`]: deleteField() });
+      } catch (err) {
+        console.warn("legacy memberEmails cleanup failed", err);
+      }
+      try {
+        const inviteRef = inviteDoc(projectId, email);
+        if (inviteRef) await deleteDoc(inviteRef);
+      } catch (err) {
+        console.warn("invite delete failed", err);
+      }
+      try {
+        const indexRef = inviteIndexRef(email);
+        if (indexRef) {
+          try {
+            await updateDoc(indexRef, {
+              projects: arrayRemove(projectId),
+              updatedAt: serverTimestamp(),
+              updatedBy: whoName(),
+              [`projectNames.${projectId}`]: deleteField(),
+            });
+          } catch (err) {
+            await setDoc(indexRef, {
+              projects: arrayRemove(projectId),
+              updatedAt: serverTimestamp(),
+              updatedBy: whoName(),
+            }, { merge: true });
+          }
+        }
+      } catch (err) {
+        console.warn("invite index update failed", err);
+      }
       memberMsg("削除しました");
       setTimeout(() => memberMsg(""), 1000);
     } catch (err) {
@@ -437,30 +788,44 @@ async function initProjectDocIfNeeded(projectId) {
     }
 
     if (!snap.exists()) {
+      const byName = whoName();
       await setDoc(ref, {
         name: projectId,
         ownerEmail: myEmail,
-        memberEmails: { [myEmail]: true },
+        memberEmailList: [myEmail],
         createdAt: serverTimestamp(),
-        createdBy: myEmail,
+        createdBy: byName,
         updatedAt: serverTimestamp(),
-        updatedBy: myEmail,
+        updatedBy: byName,
       }, { merge: true });
+      await updateDoc(
+        ref,
+        memberEmailField(myEmail),
+        true,
+        "updatedAt",
+        serverTimestamp(),
+        "updatedBy",
+        byName
+      );
+      await ensureInvite(projectId, myEmail, byName, projectId);
       memberMsg("プロジェクトdocを作成しました");
       setTimeout(() => memberMsg(""), 1200);
       return;
     }
 
     const d = snap.data() || {};
-    const patch = {};
-    if (!d.ownerEmail) patch.ownerEmail = myEmail;
-    if (!d.memberEmails || d.memberEmails[myEmail] !== true) {
-      patch[`memberEmails.${myEmail}`] = true;
+    const updates = [];
+    if (!d.ownerEmail) updates.push("ownerEmail", myEmail);
+    if (!d.memberEmails || !hasMemberEmail(d.memberEmails, myEmail)) {
+      updates.push(memberEmailField(myEmail), true);
     }
-    if (Object.keys(patch).length) {
-      patch.updatedAt = serverTimestamp();
-      patch.updatedBy = myEmail;
-      await updateDoc(ref, patch);
+    if (updates.length) {
+      updates.push("updatedAt", serverTimestamp(), "updatedBy", whoName());
+      if (!Array.isArray(d.memberEmailList) || !d.memberEmailList.includes(myEmail)) {
+        updates.push("memberEmailList", arrayUnion(myEmail));
+      }
+      await updateDoc(ref, ...updates);
+      await ensureInvite(projectId, myEmail, whoName(), d.name || projectId);
       memberMsg("初期化しました");
       setTimeout(() => memberMsg(""), 1200);
     } else {
@@ -481,11 +846,18 @@ async function addMember(projectId, emailRaw) {
   }
   try {
     const ref = doc(db, "projects", projectId);
-    await updateDoc(ref, {
-      [`memberEmails.${email}`]: true,
-      updatedAt: serverTimestamp(),
-      updatedBy: currentUser?.email || currentUser?.uid || "",
-    });
+    await updateDoc(
+      ref,
+      memberEmailField(email),
+      true,
+      "memberEmailList",
+      arrayUnion(email),
+      "updatedAt",
+      serverTimestamp(),
+      "updatedBy",
+      whoName()
+    );
+    await ensureInvite(projectId, email, undefined, projectNameCache.get(projectId));
     $m("memberEmailInput").value = "";
     memberMsg("追加しました");
     setTimeout(() => memberMsg(""), 1000);
@@ -525,9 +897,14 @@ function renderProjectList(items) {
           <div class="btns">
             <a class="btnLink" href="${base}portal.html?project=${id}">ポータル</a>
             <a class="btnLink" href="${base}sheet.html?project=${id}">Music Sheet</a>
-            <button class="smallBtn" data-act="rename" data-id="${id}" data-name="${encodeURIComponent(name)}">名前変更</button>
-            <button class="smallBtn" data-act="archive" data-id="${id}" data-on="${archiveOn}">${archiveLabel}</button>
-            <button class="smallBtn danger" data-act="delete" data-id="${id}">消去</button>
+            <details class="actionMenu">
+              <summary class="smallBtn">設定</summary>
+              <div class="actionMenuList">
+                <button class="smallBtn" data-act="rename" data-id="${id}" data-name="${encodeURIComponent(name)}">名前変更</button>
+                <button class="smallBtn" data-act="archive" data-id="${id}" data-on="${archiveOn}">${archiveLabel}</button>
+                <button class="smallBtn danger" data-act="delete" data-id="${id}">消去</button>
+              </div>
+            </details>
           </div>
         `
         : "";
@@ -570,7 +947,7 @@ list?.addEventListener("click", async (e) => {
   }
 
   const ref = doc(db, "projects", id);
-  const by = currentUser?.email || currentUser?.uid || "";
+  const by = whoName();
 
   try {
     if (act === "rename") {
@@ -589,6 +966,7 @@ list?.addEventListener("click", async (e) => {
         updatedAt: serverTimestamp(),
         updatedBy: by,
       });
+      await syncInviteIndexProjectName(id, name);
       return;
     }
     if (act === "archive") {
@@ -604,6 +982,14 @@ list?.addEventListener("click", async (e) => {
     }
 
     if (act === "delete") {
+      let projectData = null;
+      try {
+        const snap = await getDoc(ref);
+        projectData = snap.exists() ? snap.data() : null;
+      } catch (err) {
+        console.warn("project doc read failed", err);
+      }
+
       const ok1 = confirm(
         "このプロジェクトを「消去（論理削除）」します。よろしいですか？\n※データは復元可能です"
       );
@@ -619,6 +1005,9 @@ list?.addEventListener("click", async (e) => {
         updatedAt: serverTimestamp(),
         updatedBy: by,
       });
+      if (projectData) {
+        await removeProjectFromInviteIndex(id, projectData);
+      }
       alert("消去（論理削除）しました。");
       return;
     }
@@ -637,7 +1026,41 @@ async function initAdmin() {
       String(a.name || a.id).localeCompare(String(b.name || b.id))
     );
 
+    projectNameCache.clear();
+    items.forEach((item) => {
+      if (item?.id) projectNameCache.set(item.id, item.name || "");
+    });
+
+    let latestAt = null;
+    let latestBy = "";
+    items.forEach((item) => {
+      const at = item.updatedAt || item.createdAt || null;
+      if (tsValue(at) > tsValue(latestAt)) {
+        latestAt = at;
+        latestBy = item.updatedBy || item.createdBy || "";
+      }
+    });
+    projectUpdatedAt = latestAt;
+    projectUpdatedBy = latestBy;
+    updateHeaderUpdated();
+
     renderProjectList(items);
+  });
+
+  onSnapshot(collectionGroup(db, "scheduleBoard"), (snap) => {
+    let latestAt = null;
+    let latestBy = "";
+    snap.forEach((d) => {
+      const data = d.data() || {};
+      const at = data.updatedAt || null;
+      if (tsValue(at) > tsValue(latestAt)) {
+        latestAt = at;
+        latestBy = data.updatedBy || "";
+      }
+    });
+    scheduleUpdatedAt = latestAt;
+    scheduleUpdatedBy = latestBy;
+    updateHeaderUpdated();
   });
 
   setScheduleFrameAll();
@@ -702,7 +1125,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!isAdmin(user)) {
     alert("このページは管理者専用です。");
     if (user) await signOut(auth);
-    location.replace(base + "portal.html");
+    location.replace(base + "index.html");
     return;
   }
 
@@ -721,18 +1144,40 @@ $("btnCreate")?.addEventListener("click", async () => {
     msg("ログインしてね");
     return;
   }
+  const ownerEmail = normEmail(currentUser?.email || "");
+  if (!ownerEmail) {
+    msg("Owner email is required.");
+    return;
+  }
   const name = $("newName").value.trim();
+  const byName = whoName();
   if (!name) {
     msg("プロジェクト名を入れてね");
     return;
   }
 
-  const docRef = await addDoc(collection(db, "projects"), {
-    name,
-    createdAt: serverTimestamp(),
-    members: [currentUser.uid],
-    roleByUid: { [currentUser.uid]: "owner" },
-  });
+  try {
+    const docRef = await addDoc(collection(db, "projects"), {
+      name,
+      ownerEmail,
+      memberEmailList: [ownerEmail],
+      createdAt: serverTimestamp(),
+      createdBy: byName,
+      updatedAt: serverTimestamp(),
+      updatedBy: byName,
+      members: currentUser?.uid ? [currentUser.uid] : [],
+      roleByUid: currentUser?.uid ? { [currentUser.uid]: "owner" } : {},
+    });
 
-  msg(`作成しました: ${docRef.id}`);
+    try {
+      await updateDoc(docRef, memberEmailField(ownerEmail), true);
+    } catch (err) {
+      console.warn("memberEmails owner set failed", err);
+    }
+    await ensureInvite(docRef.id, ownerEmail, byName, name);
+    msg(`作成しました: ${docRef.id}`);
+  } catch (err) {
+    console.error(err);
+    msg(`作成失敗: ${err?.code || err?.message || err}`);
+  }
 });

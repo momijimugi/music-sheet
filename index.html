@@ -3,20 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Music Sheet Hub</title>
-  <meta name="description" content="譜面、スケジュール、管理をまとめて扱う音楽ポータル。" />
+  <title>MUSIC SHEET HUB</title>
+  <meta name="description" content="音楽制作のためのプロジェクトポータル" />
   <style>
     @import url("https://fonts.googleapis.com/css2?family=Marcellus&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap");
 
     :root {
       color-scheme: light dark;
       --ink: #1a1b1e;
-      --muted: #5b5f66;
+      --muted: #5a6068;
       --paper: #f6f1e8;
       --accent: #d9822b;
       --accent-strong: #b6671d;
       --teal: #1f4e4a;
-      --card: rgba(255, 255, 255, 0.8);
+      --card: rgba(255, 255, 255, 0.82);
       --stroke: rgba(26, 27, 30, 0.12);
       --shadow: 0 20px 40px rgba(26, 27, 30, 0.12);
     }
@@ -28,7 +28,7 @@
       --accent: #e08f3e;
       --accent-strong: #c8742c;
       --teal: #6ad2c7;
-      --card: rgba(18, 24, 34, 0.88);
+      --card: rgba(18, 24, 34, 0.9);
       --stroke: rgba(255, 255, 255, 0.12);
       --shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
     }
@@ -40,24 +40,6 @@
         linear-gradient(160deg, #0d1118 0%, #121822 60%, #0e141c 100%);
     }
 
-    :root[data-theme="dark"] .hero,
-    :root[data-theme="dark"] .card {
-      border: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    :root[data-theme="dark"] .btn.ghost {
-      background: rgba(18, 24, 34, 0.7);
-    }
-
-    :root[data-theme="dark"] .meta span {
-      border-color: rgba(255, 255, 255, 0.18);
-      background: rgba(18, 24, 34, 0.55);
-    }
-
-    :root[data-theme="dark"] .tag {
-      background: rgba(106, 210, 199, 0.15);
-    }
-
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme]) {
         --ink: #f1f3f6;
@@ -66,7 +48,7 @@
         --accent: #e08f3e;
         --accent-strong: #c8742c;
         --teal: #6ad2c7;
-        --card: rgba(18, 24, 34, 0.88);
+        --card: rgba(18, 24, 34, 0.9);
         --stroke: rgba(255, 255, 255, 0.12);
         --shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
       }
@@ -76,24 +58,6 @@
           radial-gradient(1200px 600px at 80% -10%, rgba(43, 107, 103, 0.25), transparent 60%),
           radial-gradient(900px 500px at -10% 20%, rgba(224, 143, 62, 0.18), transparent 50%),
           linear-gradient(160deg, #0d1118 0%, #121822 60%, #0e141c 100%);
-      }
-
-      :root:not([data-theme]) .hero,
-      :root:not([data-theme]) .card {
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      :root:not([data-theme]) .btn.ghost {
-        background: rgba(18, 24, 34, 0.7);
-      }
-
-      :root:not([data-theme]) .meta span {
-        border-color: rgba(255, 255, 255, 0.18);
-        background: rgba(18, 24, 34, 0.55);
-      }
-
-      :root:not([data-theme]) .tag {
-        background: rgba(106, 210, 199, 0.15);
       }
     }
 
@@ -113,43 +77,16 @@
     }
 
     .page {
-      max-width: 1080px;
+      max-width: 980px;
       margin: 0 auto;
       padding: 72px 28px 80px;
       position: relative;
     }
 
-    .themeToggle {
-      position: absolute;
-      top: 32px;
-      right: 36px;
-      border-radius: 999px;
-      padding: 8px 14px;
-      border: 1px solid var(--stroke);
-      background: rgba(255, 255, 255, 0.65);
-      color: var(--ink);
-      cursor: pointer;
-    }
-
-    :root[data-theme="dark"] .themeToggle {
-      background: rgba(18, 24, 34, 0.7);
-      border-color: rgba(255, 255, 255, 0.14);
-      color: var(--ink);
-    }
-
-    .page::before {
-      content: "";
-      position: absolute;
-      inset: 24px;
-      border: 1px solid rgba(26, 27, 30, 0.08);
-      border-radius: 32px;
-      pointer-events: none;
-    }
-
     .hero {
       display: grid;
-      gap: 20px;
-      padding: 36px 36px 24px;
+      gap: 18px;
+      padding: 36px 36px 28px;
       border-radius: 28px;
       background: var(--card);
       box-shadow: var(--shadow);
@@ -168,28 +105,47 @@
 
     h1 {
       font-family: "Marcellus", "Times New Roman", serif;
-      font-size: clamp(32px, 4vw, 46px);
+      font-size: clamp(34px, 5vw, 54px);
       margin: 0;
       color: var(--teal);
     }
 
     .lead {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       line-height: 1.7;
       color: var(--muted);
     }
 
-    .hero-actions {
+    .userBar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px dashed rgba(26, 27, 30, 0.18);
+      background: rgba(255, 255, 255, 0.45);
+      font-size: 12px;
+    }
+
+    .actions {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
-      margin-top: 8px;
+      align-items: center;
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       padding: 12px 18px;
       border-radius: 999px;
@@ -197,6 +153,10 @@
       font-weight: 600;
       border: 1px solid transparent;
       transition: transform 180ms ease, box-shadow 180ms ease;
+      cursor: pointer;
+      background: transparent;
+      color: inherit;
+      white-space: nowrap;
     }
 
     .btn.primary {
@@ -216,80 +176,57 @@
       box-shadow: 0 14px 24px rgba(26, 27, 30, 0.16);
     }
 
-    .meta {
-      display: flex;
+    .inviteCard {
+      margin-top: 26px;
+      display: grid;
       gap: 16px;
-      flex-wrap: wrap;
-      font-size: 14px;
-      color: var(--muted);
-    }
-
-    .meta span {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px dashed rgba(26, 27, 30, 0.18);
-      background: rgba(255, 255, 255, 0.4);
-    }
-
-    .grid {
-      margin-top: 28px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-    }
-
-    .card {
-      display: grid;
-      gap: 12px;
       padding: 22px;
       border-radius: 22px;
       background: rgba(255, 255, 255, 0.72);
       border: 1px solid rgba(255, 255, 255, 0.5);
-      text-decoration: none;
-      color: inherit;
       box-shadow: 0 14px 28px rgba(26, 27, 30, 0.1);
-      transition: transform 180ms ease, border-color 180ms ease;
-      animation: floatIn 600ms ease both;
-      animation-delay: calc(var(--i) * 90ms);
     }
 
-    .card:hover {
-      transform: translateY(-4px);
-      border-color: rgba(217, 130, 43, 0.6);
-    }
-
-    .card h2 {
-      margin: 0;
-      font-size: 18px;
-    }
-
-    .card p {
-      margin: 0;
-      color: var(--muted);
-      line-height: 1.6;
-      font-size: 14px;
-    }
-
-    .tag {
-      width: fit-content;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(31, 78, 74, 0.08);
-      color: var(--teal);
-      font-size: 12px;
-      letter-spacing: 0.08em;
-    }
-
-    footer {
-      margin-top: 36px;
+    .inviteHead {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
       flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
       gap: 12px;
+    }
+
+    .inviteList {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .inviteItem {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.6);
+    }
+
+    .inviteTitle {
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .inviteActions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .inviteHint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .muted {
       color: var(--muted);
       font-size: 13px;
     }
@@ -305,17 +242,6 @@
       }
     }
 
-    @keyframes floatIn {
-      from {
-        opacity: 0;
-        transform: translateY(10px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
     @media (max-width: 720px) {
       .page {
         padding: 56px 18px 64px;
@@ -323,16 +249,6 @@
 
       .hero {
         padding: 28px 24px;
-      }
-
-      .meta {
-        flex-direction: column;
-        align-items: flex-start;
-      }
-
-      .themeToggle {
-        top: 20px;
-        right: 20px;
       }
     }
 
@@ -346,79 +262,28 @@
 </head>
 <body>
   <main class="page">
-    <button id="btnThemeToggle" class="themeToggle" type="button">テーマ: ライト</button>
     <section class="hero">
-      <p class="eyebrow">Music Sheet Hub</p>
-      <h1>音と譜面のハブを、ここに。</h1>
-      <p class="lead">
-        管理・共有・確認を一か所にまとめた音楽ポータルです。今日の予定や最新譜面へ、迷わずアクセス。
-      </p>
-      <div class="hero-actions">
-        <a class="btn primary" href="./portal.html">ポータルを開く</a>
-        <a class="btn ghost" href="./schedule.html">スケジュールを見る</a>
+      <p class="eyebrow">Welcome</p>
+      <h1>MUSIC SHEET HUB</h1>
+      <p class="lead">ようこそ。招待されているプロジェクトを選択して始めてください。</p>
+      <div class="userBar">
+        <span id="userPill" class="pill">未ログイン</span>
+        <button id="btnLogin" class="btn ghost" type="button">Googleでログイン</button>
+        <button id="btnLogout" class="btn ghost" type="button" style="display:none;">ログアウト</button>
       </div>
-      <div class="meta">
-        <span>更新: いつでも最新</span>
-        <span>共有: リンクで即配布</span>
-        <span>管理: 権限付きで安心</span>
+      <div class="actions">
+        <a id="adminLink" class="btn primary" href="./admin.html" style="display:none;">Adminへ</a>
       </div>
     </section>
 
-    <section class="grid" aria-label="主要メニュー">
-      <a class="card" href="./sheet.html" style="--i: 1">
-        <div class="tag">SHEET</div>
-        <h2>譜面ライブラリ</h2>
-        <p>演奏用PDFや資料の一覧。必要な譜面へ素早くジャンプ。</p>
-      </a>
-      <a class="card" href="./schedule.html" style="--i: 2">
-        <div class="tag">SCHEDULE</div>
-        <h2>スケジュール</h2>
-        <p>リハ・本番・締切をひと目で確認。共有もしやすい。</p>
-      </a>
-      <a class="card" href="./portal.html" style="--i: 3">
-        <div class="tag">PORTAL</div>
-        <h2>ポータル</h2>
-        <p>告知・共有・連絡をまとめる入口。最新情報を集約。</p>
-      </a>
-      <a class="card" href="./admin.html" style="--i: 4">
-        <div class="tag">ADMIN</div>
-        <h2>管理画面</h2>
-        <p>コンテンツの更新や運用設定はこちらから。</p>
-      </a>
+    <section class="inviteCard" aria-labelledby="inviteTitle">
+      <div class="inviteHead">
+        <h2 id="inviteTitle">招待されているプロジェクト</h2>
+        <span id="inviteMsg" class="muted"></span>
+      </div>
+      <div id="inviteList" class="inviteList"></div>
     </section>
-
-    <footer>
-      <span>Music Sheet Hub</span>
-      <span>必要に応じてブックマークしてください。</span>
-    </footer>
   </main>
-  <script>
-    (function () {
-      const THEME_KEY = "theme";
-      const root = document.documentElement;
-      const btn = document.getElementById("btnThemeToggle");
-      const getPreferred = () => {
-        const stored = localStorage.getItem(THEME_KEY);
-        if (stored === "light" || stored === "dark") return stored;
-        return window.matchMedia &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches
-          ? "dark"
-          : "light";
-      };
-      const applyTheme = (theme) => {
-        root.dataset.theme = theme;
-        root.style.colorScheme = theme;
-        if (btn) btn.textContent = `テーマ: ${theme === "dark" ? "ダーク" : "ライト"}`;
-      };
-      const toggle = () => {
-        const next = getPreferred() === "dark" ? "light" : "dark";
-        localStorage.setItem(THEME_KEY, next);
-        applyTheme(next);
-      };
-
-      applyTheme(getPreferred());
-      btn?.addEventListener("click", toggle);
-    })();
-  </script>
+  <script type="module" src="/src/index.js"></script>
 </body>
 </html>
