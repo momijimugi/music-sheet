@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>MUSIC SHEET HUB</title>
-  <meta name="description" content="音楽制作のためのプロジェクトポータル" />
+  <meta name="description" content="&#x97F3;&#x697D;&#x5236;&#x4F5C;&#x30C1;&#x30FC;&#x30E0;&#x5411;&#x3051;&#x306E;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x5171;&#x6709;&#x30CF;&#x30D6;" />
   <style>
     @import url("https://fonts.googleapis.com/css2?family=Marcellus&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap");
 
@@ -38,6 +38,35 @@
         radial-gradient(1200px 600px at 80% -10%, rgba(43, 107, 103, 0.25), transparent 60%),
         radial-gradient(900px 500px at -10% 20%, rgba(224, 143, 62, 0.18), transparent 50%),
         linear-gradient(160deg, #0d1118 0%, #121822 60%, #0e141c 100%);
+    }
+
+    :root[data-theme="dark"] .hero,
+    :root[data-theme="dark"] .inviteCard,
+    :root[data-theme="dark"] .inviteItem {
+      background: rgba(14, 19, 28, 0.92);
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    :root[data-theme="dark"] .pill,
+    :root[data-theme="dark"] .btn.ghost,
+    :root[data-theme="dark"] .inviteStatus {
+      background: rgba(16, 22, 32, 0.9);
+      border-color: rgba(255, 255, 255, 0.12);
+      color: var(--ink);
+    }
+
+    :root[data-theme="dark"] .btn.ghost {
+      box-shadow: none;
+    }
+
+    :root[data-theme="dark"] .inviteStatus.ok {
+      color: #88e1d8;
+      border-color: rgba(106, 210, 199, 0.5);
+    }
+
+    :root[data-theme="dark"] .inviteStatus.ng {
+      color: #f2a25a;
+      border-color: rgba(224, 143, 62, 0.45);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -221,6 +250,51 @@
       gap: 8px;
     }
 
+    .inviteMeta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .inviteNote {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .inviteStatus {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--ink);
+    }
+
+    .inviteStatus.ok {
+      border-color: rgba(31, 78, 74, 0.4);
+      color: var(--teal);
+    }
+
+    .inviteStatus.ng {
+      border-color: rgba(217, 130, 43, 0.45);
+      color: var(--accent);
+    }
+
+    .btn.small {
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+
+    .btn.disabled {
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
     .inviteHint {
       font-size: 12px;
       color: var(--muted);
@@ -265,20 +339,20 @@
     <section class="hero">
       <p class="eyebrow">Welcome</p>
       <h1>MUSIC SHEET HUB</h1>
-      <p class="lead">ようこそ。招待されているプロジェクトを選択して始めてください。</p>
+      <p class="lead">&#x3088;&#x3046;&#x3053;&#x305D;&#x3002;&#x97F3;&#x697D;&#x5236;&#x4F5C;&#x3084;&#x30B9;&#x30B1;&#x30B8;&#x30E5;&#x30FC;&#x30EB;&#x3092;&#x5171;&#x6709;&#x3057;&#x3066;&#x3001;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x3092;&#x4E00;&#x7DD2;&#x306B;&#x9032;&#x3081;&#x308B;&#x305F;&#x3081;&#x306E;&#x30DD;&#x30FC;&#x30BF;&#x30EB;&#x3067;&#x3059;&#x3002;</p>
       <div class="userBar">
-        <span id="userPill" class="pill">未ログイン</span>
-        <button id="btnLogin" class="btn ghost" type="button">Googleでログイン</button>
-        <button id="btnLogout" class="btn ghost" type="button" style="display:none;">ログアウト</button>
+        <span id="userPill" class="pill">&#x672A;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</span>
+        <button id="btnLogin" class="btn ghost" type="button">Google&#x3067;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</button>
+        <button id="btnLogout" class="btn ghost" type="button" style="display:none;">&#x30ED;&#x30B0;&#x30A2;&#x30A6;&#x30C8;</button>
       </div>
       <div class="actions">
-        <a id="adminLink" class="btn primary" href="./admin.html" style="display:none;">Adminへ</a>
+        <a id="adminLink" class="btn primary" href="./admin.html" style="display:none;">&#x7BA1;&#x7406;&#x753B;&#x9762;&#x3078;</a>
       </div>
     </section>
 
     <section class="inviteCard" aria-labelledby="inviteTitle">
       <div class="inviteHead">
-        <h2 id="inviteTitle">招待されているプロジェクト</h2>
+        <h2 id="inviteTitle">&#x62DB;&#x5F85;&#x3055;&#x308C;&#x3066;&#x3044;&#x308B;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;</h2>
         <span id="inviteMsg" class="muted"></span>
       </div>
       <div id="inviteList" class="inviteList"></div>

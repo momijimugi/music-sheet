@@ -3,7 +3,7 @@ import { mountTopbar, getParams, getPreferredTheme } from "./ui_common";
 import { mountNav } from "./nav";
 import { auth, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, getDocs, onSnapshot, setDoc, serverTimestamp, collection, addDoc, orderBy, updateDoc, deleteDoc, query } from "firebase/firestore";
+import { doc, getDoc, getDocs, onSnapshot, setDoc, serverTimestamp, collection, collectionGroup, addDoc, orderBy, updateDoc, deleteDoc, query, where } from "firebase/firestore";
 
 const $ = (id)=>document.getElementById(id);
 const msg = (t)=>($("msg").textContent=t||"");
@@ -54,6 +54,24 @@ const me = await mountTopbar();
 const whoName = () => me?.displayName || me?.email || me?.uid || "";
 const base = import.meta.env.BASE_URL || "/";
 const guestUrl = `${base}index.html`;
+async function loadMemberProjectIds(user) {
+  if (!user?.uid) return new Set();
+  try {
+    const q = query(
+      collectionGroup(db, "members"),
+      where("memberUid", "==", user.uid)
+    );
+    const snap = await getDocs(q);
+    const ids = snap.docs
+      .map((docSnap) => docSnap.ref.parent.parent?.id)
+      .filter(Boolean);
+    return new Set(ids);
+  } catch (err) {
+    console.warn("member project list failed", err);
+    return new Set();
+  }
+}
+const memberProjectIds = await loadMemberProjectIds(me);
 const { project } = getParams();
 if(!project){
   location.replace(guestUrl);
@@ -81,71 +99,15 @@ mountNav({ current: "portal", projectId: project, hideAdmin: !isAdminUser(me) })
 function normEmail(value){
   return String(value || "").trim().toLowerCase();
 }
-let inviteIndexCache = null;
-async function loadInviteIndex(){
-  if (inviteIndexCache) return inviteIndexCache;
-  const empty = { ids: new Set(), names: {} };
-  if (isAdminUser(me)) {
-    inviteIndexCache = empty;
-    return empty;
-  }
-  const email = normEmail(me?.email);
-  if (!email) {
-    inviteIndexCache = empty;
-    return empty;
-  }
-  try{
-    const snap = await getDoc(doc(db, "inviteIndex", email));
-    const data = snap?.data() || {};
-    const list = Array.isArray(data.projects) ? data.projects : [];
-    const names = data.projectNames && typeof data.projectNames === "object"
-      ? data.projectNames
-      : {};
-    inviteIndexCache = { ids: new Set(list.filter(Boolean)), names };
-    return inviteIndexCache;
-  }catch(err){
-    console.warn("invite index load failed", err);
-    inviteIndexCache = empty;
-    return empty;
-  }
-}
-function collectMemberEmails(map){
-  const out = [];
-  const walk = (node, prefix) => {
-    if (!node || typeof node !== "object") return;
-    Object.entries(node).forEach(([key, value]) => {
-      if (value === true) {
-        out.push([...prefix, key].join("."));
-      } else if (value && typeof value === "object") {
-        walk(value, [...prefix, key]);
-      }
-    });
-  };
-  walk(map, []);
-  return out;
-}
-function hasMemberEmail(map, email){
-  const target = normEmail(email);
-  if (!target) return false;
-  if (map && map[target] === true) return true;
-  const list = collectMemberEmails(map);
-  return list.some((value) => normEmail(value) === target);
-}
-function hasMemberEmailList(list, email){
-  const target = normEmail(email);
-  if (!target || !Array.isArray(list)) return false;
-  return list.some((value) => normEmail(value) === target);
-}
-function canAccessProject(user, data){
+function canAccessProject(user, data, projectId){
   if (!user) return false;
   if (isAdminUser(user)) return true;
   const email = normEmail(user?.email);
   if (email && normEmail(data?.ownerEmail) === email) return true;
-  if (email && hasMemberEmail(data?.memberEmails, email)) return true;
-  if (email && hasMemberEmailList(data?.memberEmailList, email)) return true;
   const uid = user?.uid;
   if (uid && Array.isArray(data?.members) && data.members.includes(uid)) return true;
   if (uid && data?.roleByUid && data.roleByUid[uid]) return true;
+  if (projectId && memberProjectIds.has(projectId)) return true;
   return false;
 }
 const enc = encodeURIComponent(project);
@@ -159,35 +121,34 @@ async function initProjectSwitcher(){
   }
 
   try{
-    const invitedIds = new Set();
     let items = [];
     if (isAdminUser(me)) {
       const snap = await getDocs(collection(db, "projects"));
       snap.forEach((d) => items.push({ id: d.id, ...(d.data() || {}) }));
     } else {
-      const map = new Map();
-      const inviteInfo = await loadInviteIndex();
-      const projectIds = [...inviteInfo.ids];
+      const projectIds = [...memberProjectIds];
       if (projectIds.length) {
         const docs = await Promise.all(
-          projectIds.map((pid) => getDoc(doc(db, "projects", pid)).catch(() => null))
+          projectIds.map(async (pid) => {
+            try {
+              const snap = await getDoc(doc(db, "projects", pid));
+              if (!snap.exists()) return null;
+              const data = snap.data() || {};
+              if (data.deleted) return null;
+              if (!canAccessProject(me, data, pid)) return null;
+              return { id: pid, ...data };
+            } catch (err) {
+              if (err?.code !== "permission-denied") {
+                console.warn("project doc read failed", err);
+              }
+              return null;
+            }
+          })
         );
-        docs.forEach((snap, idx) => {
-          const pid = projectIds[idx];
-          invitedIds.add(pid);
-          if (snap?.exists()) {
-            map.set(pid, { id: pid, ...(snap.data() || {}) });
-          } else {
-            const fallback = String(inviteInfo.names?.[pid] || "").trim();
-            map.set(pid, { id: pid, name: fallback || pid });
-          }
-        });
+        items = docs.filter(Boolean);
       }
-      items = [...map.values()];
     }
-    const allowed = items.filter((item) =>
-      !item.deleted && (canAccessProject(me, item) || invitedIds.has(item.id))
-    );
+    const allowed = items.filter((item) => !item.deleted && canAccessProject(me, item, item.id));
     allowed.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
     if (!allowed.length) {
       projectSwitcher.style.display = "none";
@@ -243,11 +204,11 @@ function setScheduleTheme() {
   const scheduleTheme = document.documentElement.dataset.theme || getPreferredTheme();
   const clientMode = "client=1";
   if (f) {
-    f.src = `${base}schedule.html?embed=1&theme=${scheduleTheme}&${clientMode}&project=${enc}`;
+    f.src = `${base}schedule-portal.html?theme=${scheduleTheme}&${clientMode}&project=${enc}`;
     postScheduleTheme(scheduleTheme);
   }
   if (open) {
-    open.href = `${base}schedule.html?theme=${scheduleTheme}&${clientMode}&project=${enc}`;
+    open.href = `${base}schedule-portal.html?theme=${scheduleTheme}&${clientMode}&project=${enc}`;
   }
 }
 
@@ -294,30 +255,6 @@ const editorWrap = document.querySelector(".portalEditor");
 const editorControls = document.querySelectorAll(".toolbar button");
 const meetingTitle = document.getElementById("meetingTitle");
 
-const memberRef = me?.uid
-  ? doc(db, "projects", project, "members", me.uid)
-  : null;
-
-async function ensureMemberDoc(){
-  if (isAdminUser(me)) return true;
-  if (!memberRef) return false;
-  try{
-    const snap = await getDoc(memberRef);
-    if (snap.exists()) return true;
-  }catch(err){
-    console.warn("member doc read failed", err);
-  }
-  try{
-    await setDoc(memberRef, {
-      email: me?.email || "",
-      joinedAt: serverTimestamp(),
-    });
-    return true;
-  }catch(err){
-    console.warn("member doc create failed", err);
-    return false;
-  }
-}
 
 function updateGuestToggle(){
   const row = document.getElementById("portalGuestRow");
@@ -360,32 +297,14 @@ document.getElementById("togglePortalGuest")?.addEventListener("change", (e) => 
   applyAdminMode();
 });
 
-const memberReady = await ensureMemberDoc();
-if (!memberReady) {
-  console.warn("member doc not ready");
-}
-
 let pSnap = null;
-let inviteInfo = null;
-let fallbackName = "";
 try {
   pSnap = await getDoc(projectRef);
 } catch (err) {
   if (err?.code === "permission-denied") {
-    inviteInfo = await loadInviteIndex();
-    if (inviteInfo?.ids?.has(project)) {
-      fallbackName = String(inviteInfo.names?.[project] || project).trim();
-    } else {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-      try {
-        pSnap = await getDoc(projectRef);
-      } catch (retryErr) {
-        console.warn("project doc retry failed", retryErr);
-        msg("このプロジェクトの閲覧権限がありません");
-        location.replace(guestUrl);
-        throw retryErr;
-      }
-    }
+    msg("このプロジェクトの閲覧権限がありません");
+    location.replace(guestUrl);
+    throw err;
   } else {
     console.warn("project doc read failed", err);
     msg("このプロジェクトの閲覧権限がありません");
@@ -400,14 +319,15 @@ if (pSnap?.exists()) {
     location.replace(`${base}admin.html`);
     throw new Error("deleted project");
   }
+  if (!canAccessProject(me, pdata, project)) {
+    msg("このプロジェクトの閲覧権限がありません");
+    location.replace(guestUrl);
+    throw new Error("not member");
+  }
   const name = pdata.name || project;
   $("pTitle").textContent = name;
   if (projectPill) projectPill.textContent = name;
-  setScheduleEnabled(canAccessProject(me, pdata));
-} else if (fallbackName) {
-  $("pTitle").textContent = fallbackName;
-  if (projectPill) projectPill.textContent = fallbackName;
-  setScheduleEnabled(true);
+  setScheduleEnabled(canAccessProject(me, pdata, project));
 } else {
   location.replace(guestUrl);
   throw new Error("project not found");

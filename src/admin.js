@@ -23,6 +23,7 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 
 const base = import.meta.env.BASE_URL || "/";
@@ -30,6 +31,7 @@ const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+const DEFAULT_MEMBER_ROLE = "member";
 
 function isAdmin(user) {
   return !!user && !!user.email && ADMIN_EMAILS.includes(user.email);
@@ -468,16 +470,17 @@ function inviteDoc(projectId, email) {
   return doc(db, "projects", projectId, "invites", key);
 }
 
-function inviteIndexRef(email) {
-  const key = normEmail(email);
-  if (!key) return null;
-  return doc(db, "inviteIndex", key);
-}
-
 async function ensureInvite(projectId, email, by, projectName) {
   const ref = inviteDoc(projectId, email);
   if (!ref) return;
   const byName = by || whoName();
+  let exists = false;
+  try {
+    const snap = await getDoc(ref);
+    exists = snap.exists();
+  } catch (err) {
+    console.warn("invite doc check failed", err);
+  }
   let resolvedName = String(
     projectName || projectNameCache.get(projectId) || ""
   ).trim();
@@ -493,38 +496,15 @@ async function ensureInvite(projectId, email, by, projectName) {
     }
   }
   try {
-    await setDoc(ref, {
-      email: normEmail(email),
+    const payload = {
+      emailLower: normEmail(email),
+      role: DEFAULT_MEMBER_ROLE,
       createdAt: serverTimestamp(),
       createdBy: byName,
-    }, { merge: true });
-    const indexRef = inviteIndexRef(email);
-    if (indexRef) {
-      await setDoc(indexRef, {
-        projects: arrayUnion(projectId),
-        updatedAt: serverTimestamp(),
-        updatedBy: byName,
-      }, { merge: true });
-      if (resolvedName) {
-        try {
-          await updateDoc(indexRef, {
-            [`projectNames.${projectId}`]: resolvedName,
-            updatedAt: serverTimestamp(),
-            updatedBy: byName,
-          });
-        } catch (err) {
-          try {
-            await setDoc(indexRef, {
-              projectNames: { [projectId]: resolvedName },
-              updatedAt: serverTimestamp(),
-              updatedBy: byName,
-            }, { merge: true });
-          } catch (inner) {
-            console.warn("invite index name update failed", inner);
-          }
-        }
-      }
-    }
+      ...(exists ? {} : { usedBy: null, usedAt: null }),
+    };
+    if (resolvedName) payload.projectName = resolvedName;
+    await setDoc(ref, payload, { merge: true });
   } catch (err) {
     console.warn("invite create failed", err);
   }
@@ -543,23 +523,17 @@ async function syncInviteIndexProjectName(projectId, name) {
 
     await Promise.all(
       emails.map((email) => {
-        const indexRef = inviteIndexRef(email);
-        if (!indexRef) return null;
-        return updateDoc(indexRef, {
-          [`projectNames.${projectId}`]: resolvedName,
+        const ref = inviteDoc(projectId, email);
+        if (!ref) return null;
+        return updateDoc(ref, {
+          projectName: resolvedName,
           updatedAt: serverTimestamp(),
           updatedBy: byName,
-        }).catch(async () => {
-          await setDoc(indexRef, {
-            projectNames: { [projectId]: resolvedName },
-            updatedAt: serverTimestamp(),
-            updatedBy: byName,
-          }, { merge: true });
-        });
+        }).catch(() => null);
       })
     );
   } catch (err) {
-    console.warn("invite index name sync failed", err);
+    console.warn("invite name sync failed", err);
   }
 }
 
@@ -567,28 +541,15 @@ async function removeProjectFromInviteIndex(projectId, projectData) {
   try {
     const list = Array.isArray(projectData?.memberEmailList) ? projectData.memberEmailList : [];
     const emails = mergeMemberEmails(projectData?.memberEmails || {}, list);
-    const byName = whoName();
-
     await Promise.all(
       emails.map((email) => {
-        const indexRef = inviteIndexRef(email);
-        if (!indexRef) return null;
-        return updateDoc(indexRef, {
-          projects: arrayRemove(projectId),
-          updatedAt: serverTimestamp(),
-          updatedBy: byName,
-          [`projectNames.${projectId}`]: deleteField(),
-        }).catch(async () => {
-          await setDoc(indexRef, {
-            projects: arrayRemove(projectId),
-            updatedAt: serverTimestamp(),
-            updatedBy: byName,
-          }, { merge: true });
-        });
+        const ref = inviteDoc(projectId, email);
+        if (!ref) return null;
+        return deleteDoc(ref).catch(() => null);
       })
     );
   } catch (err) {
-    console.warn("invite index remove failed", err);
+    console.warn("invite cleanup failed", err);
   }
 }
 
@@ -603,11 +564,57 @@ function mergeMemberEmails(map, list) {
   return [...set];
 }
 
+async function syncInviteIndexMembers(projectId, emails, projectName) {
+  if (!projectId || !Array.isArray(emails) || !emails.length) return;
+  const cache = inviteSyncCache.get(projectId) || new Set();
+  const next = new Set(cache);
+  const byName = whoName();
+
+  await Promise.all(
+    emails.map((email) => {
+      const norm = normEmail(email);
+      if (!norm || next.has(norm)) return null;
+      next.add(norm);
+      return ensureInvite(projectId, norm, byName, projectName).catch((err) => {
+        console.warn("invite sync failed", err);
+      });
+    })
+  );
+
+  inviteSyncCache.set(projectId, next);
+}
+
+async function joinProjectFromInvite(projectId, uid, emailLower, inviteId) {
+  if (!projectId || !uid || !emailLower || !inviteId) return;
+  const memberRef = doc(db, "projects", projectId, "members", uid);
+  const inviteRef = doc(db, "projects", projectId, "invites", inviteId);
+  try {
+    const snap = await getDoc(memberRef);
+    if (snap.exists()) return;
+    const batch = writeBatch(db);
+    batch.set(memberRef, {
+      role: DEFAULT_MEMBER_ROLE,
+      emailLower,
+      joinedAt: serverTimestamp(),
+      memberUid: uid,
+      inviteId,
+    });
+    batch.update(inviteRef, {
+      usedBy: uid,
+      usedAt: serverTimestamp(),
+    });
+    await batch.commit();
+  } catch (err) {
+    console.warn("member join failed", err);
+  }
+}
+
 let currentUser = null;
 let initDone = false;
 let memberUnsub = null;
 let currentMemberProjectId = "";
 const projectNameCache = new Map();
+const inviteSyncCache = new Map();
 let scheduleSelectionToken = 0;
 
 mountNav({ current: "admin" });
@@ -650,13 +657,14 @@ function projectIdFromPath(path) {
   return parts[0] === "projects" ? parts[1] : "";
 }
 
-function setScheduleFrameAll() {
+function setScheduleFrameAll(reloadToken) {
   const f = document.getElementById("adminScheduleFrame");
   const open = document.getElementById("openSchedule");
   if (!f || !open) return;
 
   const theme = getPreferredTheme();
-  const url = `${base}schedule.html?theme=${theme}&scope=all`;
+  const stamp = reloadToken ? `&t=${encodeURIComponent(String(reloadToken))}` : "";
+  const url = `${base}schedule-admin.html?theme=${theme}${stamp}`;
   f.src = url + "&embed=1";
   open.href = url;
 }
@@ -681,6 +689,9 @@ function mountMemberManager(projectId) {
     const mem = d.memberEmails || {};
     const list = Array.isArray(d.memberEmailList) ? d.memberEmailList : [];
     const emails = mergeMemberEmails(mem, list).sort();
+    syncInviteIndexMembers(projectId, emails, d.name || projectId).catch((err) => {
+      console.warn("invite sync error", err);
+    });
     const missing = emails.filter((email) => mem[email] !== true);
     const listMissing = emails.filter((email) => !list.includes(email));
     if ((missing.length || listMissing.length) && currentUser) {
@@ -746,27 +757,6 @@ function mountMemberManager(projectId) {
       } catch (err) {
         console.warn("invite delete failed", err);
       }
-      try {
-        const indexRef = inviteIndexRef(email);
-        if (indexRef) {
-          try {
-            await updateDoc(indexRef, {
-              projects: arrayRemove(projectId),
-              updatedAt: serverTimestamp(),
-              updatedBy: whoName(),
-              [`projectNames.${projectId}`]: deleteField(),
-            });
-          } catch (err) {
-            await setDoc(indexRef, {
-              projects: arrayRemove(projectId),
-              updatedAt: serverTimestamp(),
-              updatedBy: whoName(),
-            }, { merge: true });
-          }
-        }
-      } catch (err) {
-        console.warn("invite index update failed", err);
-      }
       memberMsg("削除しました");
       setTimeout(() => memberMsg(""), 1000);
     } catch (err) {
@@ -782,6 +772,7 @@ async function initProjectDocIfNeeded(projectId) {
     const snap = await getDoc(ref);
 
     const myEmail = normEmail(currentUser?.email || "");
+    const myUid = currentUser?.uid || "";
     if (!myEmail) {
       memberMsg("管理者メールが取れません");
       return;
@@ -808,6 +799,7 @@ async function initProjectDocIfNeeded(projectId) {
         byName
       );
       await ensureInvite(projectId, myEmail, byName, projectId);
+      await joinProjectFromInvite(projectId, myUid, myEmail, myEmail);
       memberMsg("プロジェクトdocを作成しました");
       setTimeout(() => memberMsg(""), 1200);
       return;
@@ -826,6 +818,7 @@ async function initProjectDocIfNeeded(projectId) {
       }
       await updateDoc(ref, ...updates);
       await ensureInvite(projectId, myEmail, whoName(), d.name || projectId);
+      await joinProjectFromInvite(projectId, myUid, myEmail, myEmail);
       memberMsg("初期化しました");
       setTimeout(() => memberMsg(""), 1200);
     } else {
@@ -868,7 +861,7 @@ async function addMember(projectId, emailRaw) {
 }
 
 async function copyInvite(projectId) {
-  const url = `${location.origin}${baseUrl()}portal.html?project=${encodeURIComponent(projectId)}`;
+  const url = `${location.origin}${baseUrl()}index.html`;
   try {
     await navigator.clipboard.writeText(url);
     memberMsg("招待リンクをコピーしました");
@@ -1058,9 +1051,13 @@ async function initAdmin() {
         latestBy = data.updatedBy || "";
       }
     });
+    const prevAt = scheduleUpdatedAt;
     scheduleUpdatedAt = latestAt;
     scheduleUpdatedBy = latestBy;
     updateHeaderUpdated();
+    if (tsValue(latestAt) > tsValue(prevAt)) {
+      setScheduleFrameAll(tsValue(latestAt));
+    }
   });
 
   setScheduleFrameAll();
@@ -1175,6 +1172,7 @@ $("btnCreate")?.addEventListener("click", async () => {
       console.warn("memberEmails owner set failed", err);
     }
     await ensureInvite(docRef.id, ownerEmail, byName, name);
+    await joinProjectFromInvite(docRef.id, currentUser?.uid || "", ownerEmail, ownerEmail);
     msg(`作成しました: ${docRef.id}`);
   } catch (err) {
     console.error(err);

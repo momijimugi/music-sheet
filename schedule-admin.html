@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>作曲スケジュールボード</title>
+  <title>全案件スケジュール（管理）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" sizes="256x256" href="favicon.png">
   <link rel="apple-touch-icon" href="favicon.png">
@@ -1697,7 +1697,7 @@
         <div class="sidebar-controls" id="navButtons">
           <button class="btn btn-soft" data-nav-href="index.html"><span class="icon">🏠</span> Home</button>
           <button class="btn btn-soft" data-nav-href="portal.html"><span class="icon">🏠</span> Portal</button>
-          <button class="btn btn-soft" data-nav-href="schedule.html"><span class="icon">🗓</span> Schedule</button>
+          <button class="btn btn-soft" data-nav-href="schedule-admin.html"><span class="icon">🗓</span> Schedule</button>
           <button class="btn btn-soft" data-nav-href="tasks.html"><span class="icon">✅</span> Tasks</button>
           <button class="btn btn-soft" data-nav-href="memo.html"><span class="icon">📝</span> Memo</button>
         </div>
@@ -1858,30 +1858,16 @@
     import { TabulatorFull as Tabulator } from "tabulator-tables";
     import { auth, db } from "/src/firebase.js";
     import { onAuthStateChanged } from "firebase/auth";
-    import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, collection, collectionGroup, query, orderBy } from "firebase/firestore";
+    import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, collection, collectionGroup, query, orderBy, updateDoc } from "firebase/firestore";
 
     const URL_PARAMS = new URLSearchParams(location.search);
-    const IS_EMBED = URL_PARAMS.get('embed') === '1';
+    const IS_EMBED = false;
     const FORCED_THEME = URL_PARAMS.get('theme'); // 'light' | 'dark' | null
-    const SCOPE = URL_PARAMS.get('scope') || '';
-    const IS_ALL_SCOPE = SCOPE === 'all';
-    const FORCE_CLIENT_VIEW =
-      URL_PARAMS.get('client') === '1' ||
-      URL_PARAMS.get('client') === 'true' ||
-      URL_PARAMS.get('view') === 'client';
-    const READ_ONLY = FORCE_CLIENT_VIEW && !IS_ALL_SCOPE;
-    let PROJECT_ID = URL_PARAMS.get('project') || '';
-    if (IS_EMBED) {
-      document.querySelectorAll("[data-embed-hide]").forEach(el => {
-        el.style.display = "none";
-      });
-    }
-    // embed=1 で project が省略されることがあるので、親(Portal)のURLから拾う
-    if (!PROJECT_ID && IS_EMBED) {
-      try {
-        PROJECT_ID = new URL(window.parent.location.href).searchParams.get('project') || '';
-      } catch (e) {}
-    } // portal連携（projects/{id}）
+    const SCOPE = 'all';
+    const IS_ALL_SCOPE = true;
+    const FORCE_CLIENT_VIEW = false;
+    const READ_ONLY = false;
+    let PROJECT_ID = '';
     let projectTitleCache = null; // projects/{id}.name を保持（埋め込み＆同期の安定化）
     const STORAGE_KEY = PROJECT_ID ? `composerScheduleBoard_v10_${PROJECT_ID}` : 'composerScheduleBoard_v10';
     const BOARD_DOC = PROJECT_ID ? doc(db, 'projects', PROJECT_ID, 'scheduleBoard', 'state') : null;
@@ -1912,6 +1898,8 @@
     })();
 
     let currentUser = null;
+    let lastLocalEditAt = 0;
+
     let sheetUiUnsub = null;
     let allCuesUnsub = null;
     let allSheetUiUnsubs = new Map();
@@ -1931,11 +1919,46 @@
     let lastCueTracks = null;
     let allBoardsUnsub = null;
     let allBoardsCache = [];
+    let allCueTracksByProject = new Map();
+    let allBoardsReady = false;
+    let allCuesReady = false;
+    const dirtyProjectIds = new Set();
+    const localEditProjects = new Map();
     const allProjectNameMap = new Map();
     function showTopError(t){
       const el = document.getElementById("topError");
-      if (el) el.textContent = t;
-      console.warn("[schedule]", t);
+      const msg = String(t || "");
+      if (el) el.textContent = msg;
+      if (msg) console.warn("[schedule]", msg);
+    }
+    function clearTopError(){
+      const el = document.getElementById("topError");
+      if (el) el.textContent = "";
+    }
+    function markDirtyProjectId(projectId){
+      if (!IS_ALL_SCOPE) return;
+      if (projectId) dirtyProjectIds.add(projectId);
+    }
+    function markDirtyFromTrackId(trackId, projectId){
+      if (!IS_ALL_SCOPE) return;
+      if (projectId) {
+        dirtyProjectIds.add(projectId);
+        return;
+      }
+      const info = splitScopedTrackId(trackId);
+      if (info?.projectId) {
+        dirtyProjectIds.add(info.projectId);
+        return;
+      }
+      if (selectedProjectId) dirtyProjectIds.add(selectedProjectId);
+    }
+    function shouldIgnoreLocalUpdate(data){
+      if (!data || data.clientId !== CLIENT_ID) return false;
+      const ts = data.updatedAt?.toMillis
+        ? data.updatedAt.toMillis()
+        : (data.updatedAt?.seconds ? data.updatedAt.seconds * 1000 : 0);
+      if (!ts || !lastLocalEditAt) return false;
+      return Math.abs(ts - lastLocalEditAt) < 1500;
     }
     function stopCues(){
       if (cuesUnsub) {
@@ -1973,6 +1996,7 @@
     let saveTimer = null;
     let isApplyingRemote = false;
     let lastRemoteRev = 0;
+    const canWriteSchedule = () => !!currentUser && !READ_ONLY;
 
 
 
@@ -2003,6 +2027,99 @@
       return { projectId, trackId };
     }
 
+    function buildStructureSignature(data) {
+      if (!data) return '';
+      const projectParts = (data.projects || []).map((p) => {
+        const trackIds = (p.tracks || []).map((t) => t.id).join(',');
+        return `${p.id}:${trackIds}`;
+      }).join('|');
+      const statusParts = (data.statuses || []).map((s) => `${s.name}:${s.color}`).join('|');
+      const settings = data.settings || {};
+      return [
+        data.startDate || '',
+        String(data.daysToShow || ''),
+        projectParts,
+        statusParts,
+        String(settings.cellWidth || ''),
+        String(settings.cellHeight || ''),
+        String(settings.heatmapEnabled),
+        String(settings.showProjectTags),
+        String(settings.theme || '')
+      ].join('~');
+    }
+
+    function flattenScheduleMap(schedule) {
+      const map = new Map();
+      if (!schedule) return map;
+      Object.entries(schedule).forEach(([trackId, dates]) => {
+        if (!dates) return;
+        Object.entries(dates).forEach(([date, value]) => {
+          const key = `${trackId}|${date}`;
+          map.set(key, value || '');
+        });
+      });
+      return map;
+    }
+
+    function flattenNotesMap(notes) {
+      const map = new Map();
+      if (!notes) return map;
+      Object.entries(notes).forEach(([key, value]) => {
+        map.set(key, value || '');
+      });
+      return map;
+    }
+
+    function diffMap(prev, next) {
+      const changes = [];
+      prev.forEach((value, key) => {
+        const nextValue = next.has(key) ? next.get(key) : '';
+        if ((value || '') !== (nextValue || '')) {
+          changes.push([key, nextValue || '']);
+        }
+      });
+      next.forEach((value, key) => {
+        if (!prev.has(key)) {
+          changes.push([key, value || '']);
+        }
+      });
+      return changes;
+    }
+
+    function applyScheduleChanges(changes) {
+      if (!changes.length) return;
+      changes.forEach(([key, value]) => {
+        const sep = key.indexOf('|');
+        if (sep === -1) return;
+        const trackId = key.slice(0, sep);
+        const date = key.slice(sep + 1);
+        const selectEl = document.querySelector(`.cell-select[data-track-id="${trackId}"][data-date="${date}"]`);
+        if (!selectEl) return;
+        selectEl.value = value || '';
+        styleCellSelect(selectEl);
+      });
+      updateSelectionStyles();
+    }
+
+    function applyNoteChanges(changes) {
+      if (!changes.length) return;
+      changes.forEach(([key, value]) => {
+        const sep = key.indexOf('|');
+        if (sep === -1) return;
+        const trackId = key.slice(0, sep);
+        const date = key.slice(sep + 1);
+        const cell = document.querySelector(`.cell[data-track-id="${trackId}"][data-date="${date}"]`);
+        if (!cell) return;
+        if (value) {
+          cell.classList.add('has-note');
+          cell.title = value;
+        } else {
+          cell.classList.remove('has-note');
+          cell.title = '';
+        }
+      });
+    }
+
     function mergeAllBoards(boards) {
       const baseState = loadStateOrInit();
       baseState.projects = [];
@@ -2030,6 +2147,11 @@
           projects[0] ||
           { id: projectId, name: projectId, tracks: [] };
 
+        const cueTracks = allCueTracksByProject.get(projectId) || [];
+        const sourceTracks = (sourceProject.tracks || []).length
+          ? sourceProject.tracks
+          : cueTracks;
+
         const projectName =
           allProjectNameMap.get(projectId) ||
           sourceProject.name ||
@@ -2043,7 +2165,7 @@
         };
 
         const trackIdMap = new Map();
-        (sourceProject.tracks || []).forEach((t) => {
+        (sourceTracks || []).forEach((t) => {
           if (!t?.id) return;
           const scopedId = makeScopedTrackId(projectId, t.id);
           trackIdMap.set(t.id, scopedId);
@@ -2092,13 +2214,65 @@
       return baseState;
     }
 
+    function buildStateFromCues(projectId, tracks) {
+      const name = allProjectNameMap.get(projectId) || projectId;
+      return {
+        startDate: formatDateISO(new Date()),
+        daysToShow: DEFAULT_DAYS_TO_SHOW,
+        projects: [{
+          id: projectId,
+          name,
+          color: "#62c3ff",
+          collapsed: false,
+          archived: false,
+          tracks: Array.isArray(tracks) ? tracks : []
+        }],
+        schedule: {},
+        cellNotes: {},
+        statuses: DEFAULT_STATUSES.slice(),
+        settings: {
+          cellWidth: 70,
+          cellHeight: 28,
+          heatmapEnabled: true,
+          showProjectTags: true,
+          theme: detectPreferredTheme()
+        }
+      };
+    }
+
     function renderAllBoards() {
-      if (!allBoardsCache.length) {
-        showTopError("全案件のスケジュールが見つかりませんでした。");
+      const boards = allBoardsCache.slice();
+      const existing = new Set(boards.map((b) => b.projectId));
+      allCueTracksByProject.forEach((tracks, projectId) => {
+        if (!tracks?.length || existing.has(projectId)) return;
+        boards.push({ projectId, state: buildStateFromCues(projectId, tracks) });
+      });
+
+      if (!boards.length) {
+        if (!allBoardsReady && !allCuesReady) {
+          showTopError("\u8aad\u307f\u8fbc\u307f\u4e2d...");
+          return;
+        }
+        showTopError("\u307e\u3060\u5168\u6848\u4ef6\u306e\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb\u304c\u3042\u308a\u307e\u305b\u3093\u3002");
         return;
       }
+      clearTopError();
 
-      state = mergeAllBoards(allBoardsCache);
+      const nextState = mergeAllBoards(boards);
+      const nextSignature = buildStructureSignature(nextState);
+      if (IS_ALL_SCOPE && lastRenderedSignature && nextSignature === lastRenderedSignature) {
+        const nextSchedule = flattenScheduleMap(nextState.schedule);
+        const nextNotes = flattenNotesMap(nextState.cellNotes);
+        const scheduleChanges = diffMap(lastRenderedSchedule, nextSchedule);
+        const noteChanges = diffMap(lastRenderedNotes, nextNotes);
+        state = nextState;
+        applyScheduleChanges(scheduleChanges);
+        applyNoteChanges(noteChanges);
+        lastRenderedSchedule = nextSchedule;
+        lastRenderedNotes = nextNotes;
+        return;
+      }
+      state = nextState;
       ensureSettingsObject();
       if (!state.settings.theme) {
         state.settings.theme = detectPreferredTheme();
@@ -2106,11 +2280,17 @@
       if (FORCED_THEME === 'light' || FORCED_THEME === 'dark') {
         state.settings.theme = FORCED_THEME;
       }
+      if (IS_EMBED && typeof state.settings.showProjectTags !== 'boolean') {
+        state.settings.showProjectTags = false;
+      }
       applyTheme(state.settings.theme);
-      applyTagVisibility(state.settings.showProjectTags);
+      applyTagVisibility(IS_EMBED ? false : state.settings.showProjectTags);
       selectedProjectId = state.projects[0]?.id || null;
       showOnlySelected = false;
       renderAll();
+      lastRenderedSignature = nextSignature;
+      lastRenderedSchedule = flattenScheduleMap(state.schedule);
+      lastRenderedNotes = flattenNotesMap(state.cellNotes);
     }
 
     const THEME_KEY = 'theme';
@@ -2142,6 +2322,9 @@
     let currentDates = [];
     let trackIdToRowIndex = {};
     let dateToColIndex = {};
+    let lastRenderedSignature = '';
+    let lastRenderedSchedule = new Map();
+    let lastRenderedNotes = new Map();
 
     let contextMenuTarget = null;
     let trackMemoState = { projectId: null, trackId: null };
@@ -2172,6 +2355,9 @@
         remoteUnsub();
         remoteUnsub = null;
       }
+      lastRenderedSignature = '';
+      lastRenderedSchedule = new Map();
+      lastRenderedNotes = new Map();
 
       const allMode = document.getElementById('allMode');
       const appShell = document.querySelector('.app-shell');
@@ -2206,11 +2392,24 @@
       });
 
       allBoardsUnsub = onSnapshot(collectionGroup(db, "scheduleBoard"), (snap)=>{
+        const prevMap = new Map(allBoardsCache.map((b) => [b.projectId, b]));
+        const now = Date.now();
         const boards = [];
         snap.forEach((d)=>{
           const data = d.data() || {};
           const pid = projectIdFromPath(d.ref.path);
           if (!pid || !data.state) return;
+          const localTs = localEditProjects.get(pid);
+          if (localTs && (now - localTs) < 1500) {
+            const prev = prevMap.get(pid);
+            if (prev) {
+              boards.push(prev);
+              return;
+            }
+          }
+          if (data.clientId === CLIENT_ID) {
+            localEditProjects.delete(pid);
+          }
           try{
             const normalized = normalizeImportedState(data.state);
             boards.push({ projectId: pid, state: normalized });
@@ -2219,6 +2418,7 @@
           }
         });
         allBoardsCache = boards;
+        allBoardsReady = true;
         renderAllBoards();
       }, (err)=>{
         console.error(err);
@@ -2253,7 +2453,11 @@
         // Firestoreに既存ボードがあれば優先して読み込み（portal案件単位）
         if (currentUser) {
           const remote = await loadRemoteStateOnce();
-          if (remote) state = remote;
+          if (remote) {
+            state = remote;
+          } else if (PROJECT_ID) {
+            state = createEmptyBoardState(PROJECT_ID);
+          }
         }
 
         // 既存データから該当案件だけ取り出す（なければ初期化）
@@ -2326,32 +2530,18 @@
       if (FORCED_THEME === 'light' || FORCED_THEME === 'dark') {
         state.settings.theme = FORCED_THEME;
       }
+      if (IS_EMBED && typeof state.settings.showProjectTags !== 'boolean') {
+        state.settings.showProjectTags = false;
+      }
       applyTheme(state.settings.theme);
-      applyTagVisibility(state.settings.showProjectTags);
+      applyTagVisibility(IS_EMBED ? false : state.settings.showProjectTags);
       if (FORCE_CLIENT_VIEW) {
         setClientViewMode(true);
       }
     }
 
     (async ()=>{
-      const params = new URLSearchParams(location.search);
-      const embed  = params.get("embed") === "1";
-      const scope  = params.get("scope") || "";
-      const project = PROJECT_ID || params.get("project") || "";
-
-      if(scope === "all"){
-        await startAllMode();
-        return;
-      }
-      if(project){
-        await startProjectMode(project);
-        return;
-      }
-      if(embed){
-        showTopError("埋め込み表示：project が指定されていません（portalから ?project=... を渡してください）");
-        return;
-      }
-      showTopError("project が未指定です");
+      await startAllMode();
     })();
 
     function toDateOnly(date) {
@@ -2366,7 +2556,17 @@
     }
 
     function parseISO(dateStr) {
-      const [y, m, d] = dateStr.split('-').map(Number);
+      if (!dateStr || typeof dateStr !== 'string') {
+        return toDateOnly(new Date());
+      }
+      const parts = dateStr.split('-');
+      if (parts.length < 3) {
+        return toDateOnly(new Date());
+      }
+      const y = Number(parts[0]);
+      const m = Number(parts[1]);
+      const d = Number(parts[2]);
+      if (!y || !m || !d) return toDateOnly(new Date());
       return new Date(y, m - 1, d);
     }
 
@@ -2466,6 +2666,7 @@
           });
         });
         
+        if (!obj.startDate) obj.startDate = formatDateISO(toDateOnly(new Date()));
         if (!obj.daysToShow) obj.daysToShow = DEFAULT_DAYS_TO_SHOW;
         if (!obj.statuses || !Array.isArray(obj.statuses) || obj.statuses.length === 0) {
           obj.statuses = DEFAULT_STATUSES;
@@ -2485,6 +2686,7 @@
       }
 
       // daysToShow / statuses の補完
+      if (!data.startDate) data.startDate = formatDateISO(toDateOnly(new Date()));
       if (!data.daysToShow) data.daysToShow = DEFAULT_DAYS_TO_SHOW;
       if (!data.statuses || !Array.isArray(data.statuses) || data.statuses.length === 0) {
         data.statuses = DEFAULT_STATUSES;
@@ -2543,6 +2745,80 @@
       }
     }
 
+
+    let pendingRemoteState = null;
+    let pendingRemoteTimer = null;
+     function isBusyEditing() {
+      if (isSelecting || isAltDragging) return true;
+      if (saveTimer) return true;
+      if ((Date.now() - lastLocalEditAt) < 800) return true;
+      const active = document.activeElement;
+      if (active) {
+        const tag = active.tagName;
+        if (tag === 'SELECT' && active.classList.contains('cell-select')) return true;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || active.isContentEditable) return true;
+        const pop = document.getElementById('inputPopover');
+        if (pop && !pop.classList.contains('hidden') && active.closest('#inputPopover')) {
+          return true;
+        }
+      }
+      const memo = document.getElementById('trackMemoOverlay');
+      if (memo && !memo.classList.contains('hidden')) return true;
+      const note = document.getElementById('cellNoteOverlay');
+      if (note && !note.classList.contains('hidden')) return true;
+      return false;
+    }
+
+    function applyRemoteState(next) {
+      isApplyingRemote = true;
+      try {
+        state = next;
+        if (lastCueTracks) syncTracksFromCues(lastCueTracks);
+
+        if (PROJECT_ID) {
+          const existing = (state.projects || []).find(p => p.id === PROJECT_ID);
+          const proj = existing || {
+            id: PROJECT_ID,
+            name: projectTitleCache || PROJECT_ID || 'Loading',
+            color: '#62c3ff',
+            collapsed: false,
+            archived: false,
+            tracks: []
+          };
+          if (projectTitleCache) {
+            proj.name = projectTitleCache;
+          }
+          state.projects = [proj];
+          selectedProjectId = PROJECT_ID;
+          showOnlySelected = true;
+        }
+
+        ensureSettingsObject();
+        applyTheme(state.settings.theme || detectPreferredTheme());
+        selectedCells.clear();
+        lastFocusedCell = null;
+
+        renderAll();
+      } finally {
+        isApplyingRemote = false;
+      }
+    }
+
+    function schedulePendingRemoteApply() {
+      if (pendingRemoteTimer) return;
+      pendingRemoteTimer = setTimeout(() => {
+        pendingRemoteTimer = null;
+        if (!pendingRemoteState) return;
+        if (isBusyEditing()) {
+          schedulePendingRemoteApply();
+          return;
+        }
+        const next = pendingRemoteState;
+        pendingRemoteState = null;
+        applyRemoteState(next);
+      }, 300);
+    }
+
     function startRemoteListener() {
       if (!BOARD_DOC || !currentUser) return;
       if (remoteUnsub) remoteUnsub();
@@ -2552,59 +2828,29 @@
         const d = snap.data() || {};
         if (!d.state) return;
 
-        // 自分が書いた更新は無視（ループ防止）
         if (d.clientId && d.clientId === CLIENT_ID) return;
 
-        // 更新の新旧判定（同一データの反復適用を防ぐ）
         const ts = d.updatedAt;
         const rev = ts?.seconds ? (ts.seconds * 1000 + (ts.nanoseconds || 0) / 1e6) : Date.now();
         if (rev <= lastRemoteRev) return;
         lastRemoteRev = rev;
 
-        isApplyingRemote = true;
-        try {
-          const next = normalizeImportedState(d.state);
-          state = next;
+        const selfIds = new Set([currentUser?.displayName, currentUser?.email, currentUser?.uid].filter(Boolean));
+        const isSelfUpdate = selfIds.has(d.updatedBy);
+        const localCooldown = (Date.now() - lastLocalEditAt) < 1500;
+        if (isSelfUpdate && localCooldown) return;
 
-          // Music Sheetの曲リスト（cues）が来ていれば、曲一覧はそちらを優先
-          if (lastCueTracks) syncTracksFromCues(lastCueTracks);
-
-          // portal連携：案件はPROJECT_IDに固定
-          if (PROJECT_ID) {
-            const existing = (state.projects || []).find(p => p.id === PROJECT_ID);
-            const proj = existing || {
-              id: PROJECT_ID,
-              name: (PROJECT_ID || '（読み込み中）'),
-              color: '#62c3ff',
-              collapsed: false,
-              archived: false,
-              tracks: []
-            };
-            // タイトルが未解決ならキャッシュを優先
-            if (projectTitleCache && (!proj.name || proj.name.includes('読み込み中') || proj.name.includes('取得失敗') || proj.name.includes('見つかりません'))) {
-              proj.name = projectTitleCache;
-            }
-            state.projects = [proj];
-            selectedProjectId = PROJECT_ID;
-            showOnlySelected = true;
-          }
-
-          ensureSettingsObject();
-          applyTheme(state.settings.theme || detectPreferredTheme());
-          selectedCells.clear();
-          lastFocusedCell = null;
-
-          renderAll();
-        } finally {
-          isApplyingRemote = false;
+        const next = normalizeImportedState(d.state);
+        if (isBusyEditing()) {
+          pendingRemoteState = next;
+          schedulePendingRemoteApply();
+          return;
         }
+        applyRemoteState(next);
       }, (err) => {
         console.error(err);
       });
     }
-
-    
-    
 
     function buildTrackLabelFromCue(data, id) {
       const m = (data?.m ?? '').toString().trim();
@@ -2772,17 +3018,45 @@
       sheetTrackMetaById = new Map();
       allCuesUnsub = onSnapshot(collectionGroup(db, 'cues'), (snap) => {
         const next = new Map();
+        const trackByProject = new Map();
         snap.forEach((d) => {
           const pid = projectIdFromPath(d.ref.path);
           if (!pid) return;
           const data = d.data() || {};
           const status = data.status || '';
           const len = data.len || '';
-          if (!status && !len) return;
-          next.set(makeScopedTrackId(pid, d.id), { status, len, projectId: pid });
+          if (status || len) {
+            next.set(makeScopedTrackId(pid, d.id), { status, len, projectId: pid });
+          }
+          const list = trackByProject.get(pid) || [];
+          list.push({
+            id: d.id,
+            name: buildTrackLabelFromCue(data, d.id),
+            m: data?.m ?? null
+          });
+          trackByProject.set(pid, list);
         });
         sheetTrackMetaById = next;
-        renderAll();
+        trackByProject.forEach((list, pid) => {
+          list.sort((a, b) => {
+            const an = parseInt(a.m, 10);
+            const bn = parseInt(b.m, 10);
+            const aOk = Number.isFinite(an);
+            const bOk = Number.isFinite(bn);
+            if (aOk && bOk) return an - bn;
+            if (aOk && !bOk) return -1;
+            if (!aOk && bOk) return 1;
+            return String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+          });
+          trackByProject.set(pid, list.map(({ id, name }) => ({ id, name })));
+        });
+        allCueTracksByProject = trackByProject;
+        allCuesReady = true;
+        if (IS_ALL_SCOPE) {
+          renderAllBoards();
+        } else {
+          renderAll();
+        }
       }, (err) => {
         console.warn('[schedule] cues(all) error', err);
       });
@@ -2862,6 +3136,36 @@
       return { scheduleByProject, notesByProject };
     }
 
+    function updateAllBoardsCacheForProjects(projectIds) {
+      if (!IS_ALL_SCOPE || !projectIds || !projectIds.size) return;
+      const { scheduleByProject, notesByProject } = buildAllScopePayloads();
+      const targets = new Set(projectIds);
+      const updated = [];
+      const existing = new Set();
+      allBoardsCache.forEach((board) => {
+        if (!board?.projectId) return;
+        existing.add(board.projectId);
+        if (!targets.has(board.projectId)) {
+          updated.push(board);
+          return;
+        }
+        const base = board?.state
+          ? JSON.parse(JSON.stringify(board.state))
+          : createEmptyBoardState(board.projectId);
+        base.schedule = scheduleByProject.get(board.projectId) || {};
+        base.cellNotes = notesByProject.get(board.projectId) || {};
+        updated.push({ projectId: board.projectId, state: base });
+      });
+      targets.forEach((pid) => {
+        if (existing.has(pid)) return;
+        const base = createEmptyBoardState(pid);
+        base.schedule = scheduleByProject.get(pid) || {};
+        base.cellNotes = notesByProject.get(pid) || {};
+        updated.push({ projectId: pid, state: base });
+      });
+      allBoardsCache = updated;
+    }
+
     function createEmptyBoardState(projectId) {
       return normalizeImportedState({
         projects: [{
@@ -2888,15 +3192,20 @@
 
     function scheduleRemoteSave() {
       if (isApplyingRemote) return;
+      if (!canWriteSchedule()) return;
 
       if (IS_ALL_SCOPE) {
         if (!currentUser) return;
+        if (!dirtyProjectIds.size) return;
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(async () => {
+          const targets = new Set(dirtyProjectIds);
+          dirtyProjectIds.clear();
           try {
             const { scheduleByProject, notesByProject } = buildAllScopePayloads();
             const tasks = [];
             scheduleByProject.forEach((schedule, projectId) => {
+              if (!targets.has(projectId)) return;
               const board = allBoardsCache.find((b) => b.projectId === projectId);
               const payload = board?.state
                 ? JSON.parse(JSON.stringify(board.state))
@@ -2917,6 +3226,7 @@
             await Promise.all(tasks);
           } catch (e) {
             console.error(e);
+            targets.forEach((pid) => dirtyProjectIds.add(pid));
           }
         }, 400);
         return;
@@ -2965,7 +3275,20 @@
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       } catch (_) {}
 
+      if (!isApplyingRemote) {
+        lastLocalEditAt = Date.now();
+      }
+
       // Firestore（共有＆同時編集）
+      if (IS_ALL_SCOPE) {
+        const targets = new Set(dirtyProjectIds);
+        if (!targets.size && selectedProjectId) {
+          dirtyProjectIds.add(selectedProjectId);
+          targets.add(selectedProjectId);
+        }
+        targets.forEach((pid) => localEditProjects.set(pid, Date.now()));
+        updateAllBoardsCacheForProjects(targets);
+      }
       scheduleRemoteSave();
     }
 
@@ -3599,6 +3922,7 @@
 
             cellRow += `
               <td class="${cellClasses}"
+                  data-project-id="${project.id}"
                   data-track-id="${track.id}"
                   data-date="${iso}"
                   data-row-index="${rowIndex}"
@@ -3609,12 +3933,14 @@
                   <span class="cell-label">${value ? escapeHtml(value) : ''}</span>
                   <button type="button"
                           class="cell-dropdown-btn"
+                          data-project-id="${project.id}"
                           data-track-id="${track.id}"
                           data-date="${iso}"
                           data-row-index="${rowIndex}"
                           data-col-index="${colIndex}">▼</button>
                   <select
                     class="cell-select"
+                    data-project-id="${project.id}"
                     data-track-id="${track.id}"
                     data-date="${iso}"
                     data-row-index="${rowIndex}"
@@ -4040,6 +4366,7 @@
 
     function handleCellMouseUp(ev) {
       const cell = ev.currentTarget;
+      const projectId = cell.dataset.projectId;
       const trackId = cell.dataset.trackId;
       const date = cell.dataset.date;
       const rowIndex = parseInt(cell.dataset.rowIndex, 10);
@@ -4056,8 +4383,16 @@
         } else {
           delete state.schedule[trackId][date];
         }
+        markDirtyFromTrackId(trackId, projectId);
         saveState();
-        renderGrid();
+        const selectEl = cell.querySelector('.cell-select');
+        if (selectEl) {
+          selectEl.value = src.value || "";
+          styleCellSelect(selectEl);
+        }
+        if (!IS_ALL_SCOPE) {
+          renderGrid();
+        }
       }
 
       isSelecting = false;
@@ -4082,6 +4417,7 @@
     });
 
     window.handleCellChange = function(selectEl) {
+      const projectId = selectEl.dataset.projectId;
       const trackId = selectEl.dataset.trackId;
       const date = selectEl.dataset.date;
       const value = selectEl.value;
@@ -4101,16 +4437,35 @@
       pushUndo();
 
       if (selectedCells.size > 1 && selectedCells.has(key)) {
+        const dirtyTracks = new Set();
         selectedCells.forEach(k => {
           const [t, d] = k.split('|');
           applyTo(t, d, value);
+          dirtyTracks.add(t);
         });
+        dirtyTracks.forEach((id) => markDirtyFromTrackId(id));
       } else {
         applyTo(trackId, date, value);
+        markDirtyFromTrackId(trackId, projectId);
       }
 
       saveState();
-      renderGrid();
+      if (IS_ALL_SCOPE) {
+        if (selectedCells.size > 1 && selectedCells.has(key)) {
+          selectedCells.forEach((k) => {
+            const [t, d] = k.split('|');
+            const el = document.querySelector(`.cell-select[data-track-id="${t}"][data-date="${d}"]`);
+            if (!el) return;
+            el.value = value;
+            styleCellSelect(el);
+          });
+        } else {
+          styleCellSelect(selectEl);
+        }
+        updateSelectionStyles();
+      } else {
+        renderGrid();
+      }
     };
 
     function updateFilterButtons() {
@@ -5092,6 +5447,7 @@
 
       pushUndo();
       track.memo = newMemo;
+      markDirtyProjectId(trackMemoState.projectId);
       saveState();
       closeTrackMemoEditor();
       renderGrid();
@@ -5134,6 +5490,7 @@
       } else {
         delete state.cellNotes[cellNoteKey];
       }
+      markDirtyFromTrackId(cellNoteState.trackId);
       saveState();
       closeCellNoteEditor();
       renderGrid();

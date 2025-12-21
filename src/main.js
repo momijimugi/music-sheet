@@ -25,6 +25,8 @@ const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
+const base = import.meta.env.BASE_URL || "/";
+const guestUrl = `${base}index.html`;
 
 const $ = (id) => document.getElementById(id);
 const msg = (t) => ($("msg").textContent = t || "");
@@ -181,14 +183,46 @@ function renderStatusTag(value){
     return `${y}/${m}/${d}`;
   }
 
-  function renderNextScheduleTag(value){
+function renderNextScheduleTag(value){
     if (!value || !value.status) return `<span class="muted">—</span>`;
     const color = value.color || "#6fd6ff";
     const bg = color + "22";
     const bd = color + "55";
     const label = `${value.dateLabel || value.date || ""} ${value.status}`.trim();
-    return `<span class="tagPill" style="background:${bg};border-color:${bd};color:var(--tag-text)">${escapeHtml(label)}</span>`;
+  return `<span class="tagPill" style="background:${bg};border-color:${bd};color:var(--tag-text)">${escapeHtml(label)}</span>`;
   }
+
+async function ensureProjectAccess(projectId, user) {
+  if (!projectId || !user) return false;
+  if (isAdmin(user)) return true;
+  const uid = user?.uid;
+  if (uid) {
+    try {
+      const memberSnap = await getDoc(doc(db, "projects", projectId, "members", uid));
+      if (memberSnap.exists()) return true;
+    } catch (err) {
+      if (err?.code !== "permission-denied") {
+        console.warn("member access check failed", err);
+      }
+    }
+  }
+  try {
+    const snap = await getDoc(doc(db, "projects", projectId));
+    if (!snap.exists()) return false;
+    const data = snap.data() || {};
+    if (data.deleted) return false;
+    if (uid && Array.isArray(data.members) && data.members.includes(uid)) return true;
+    if (uid && data?.roleByUid && data.roleByUid[uid]) return true;
+    const email = String(user?.email || "").trim().toLowerCase();
+    if (email && String(data.ownerEmail || "").trim().toLowerCase() === email) return true;
+    return false;
+  } catch (err) {
+    if (err?.code !== "permission-denied") {
+      console.warn("project access check failed", err);
+    }
+    return false;
+  }
+}
 
   function renderSelectCell(innerHtml){
   const v = innerHtml || `<span class="muted">&mdash;</span>`;
@@ -301,6 +335,7 @@ function applyStatusUI(){
   updateStatusPreview();
 
   // Tabulator column update（statusを“タグ表示 + ドロップダウン編集”に）
+  if (!tableReady) return;
   try{
     table.updateColumnDefinition("status", {
       title: "進捗",
@@ -441,7 +476,13 @@ function listenUISettings(projectId){
       if ($("fpsDefault")) $("fpsDefault").value = fps;
       window.__FPS_DEFAULT__ = fps;
       // 初回はデフォルトを書いておく（共有に便利）
-      await setDoc(ref, { statuses, fpsDefault: "24", createdAt: serverTimestamp() }, { merge:true });
+      if (canEditAll()) {
+        await setDoc(
+          ref,
+          { statuses, fpsDefault: "24", createdAt: serverTimestamp() },
+          { merge:true }
+        );
+      }
     }
     applyStatusUI();
   }, (err) => {
@@ -550,6 +591,7 @@ let projectNameLoaded = false;
 let scheduleUnsub = null;
 let scheduleNextMap = new Map();
 let scheduleStatusMap = new Map();
+let tableReady = false;
 
 const table = new Tabulator("#grid", {
   height: "100%",
@@ -657,6 +699,11 @@ const table = new Tabulator("#grid", {
     { title: "OUT TC", field: "out", width: 110, editor: "input", editable: () => canEditField("out") },
     { title: "INT TC", field: "interval", width: 110, headerSort: false },
   ],
+});
+table.on("tableBuilt", () => {
+  tableReady = true;
+  applyStatusUI();
+  applyPermissionUI();
 });
 
 applyLenUI();
@@ -767,9 +814,11 @@ function applyPermissionUI(){
 
   updateGuestToggle();
 
-  try{
-    table.updateColumnDefinition("__handle", { visible: canAll });
-  }catch(_){}
+  if (tableReady) {
+    try{
+      table.updateColumnDefinition("__handle", { visible: canAll });
+    }catch(_){}
+  }
 
   if (selectedId) {
     const row = table.getRow(selectedId);
@@ -1531,17 +1580,23 @@ $("btnLogin").onclick = async () => {
 };
 $("btnLogout").onclick = async () => { await signOut(auth); };
 
-onAuthStateChanged(auth, (user) => {
+onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   if(user){
     $("userPill").textContent = user.email || user.uid;
     $("btnLogin").style.display = "none";
     $("btnLogout").style.display = "inline-block";
+    const pid = $("projectId").value.trim();
+    const canAccess = await ensureProjectAccess(pid, user);
+    if (!canAccess) {
+      msg("このプロジェクトの閲覧権限がありません");
+      location.replace(guestUrl);
+      return;
+    }
     if (!projectNameLoaded) {
       projectNameLoaded = true;
       // プロジェクト名をヘッダーに反映
       (async () => {
-        const pid = $("projectId").value.trim();
         if (!pid) return;
         try {
           const pSnap = await getDoc(doc(db, "projects", pid));
@@ -1557,7 +1612,7 @@ onAuthStateChanged(auth, (user) => {
         }
       })();
     }
-    listen($("projectId").value.trim());
+    listen(pid);
   }else{
     $("userPill").textContent = "未ログイン";
     $("btnLogin").style.display = "inline-block";
