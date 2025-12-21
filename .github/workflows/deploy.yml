@@ -1,8 +1,12 @@
 name: Deploy to GitHub Pages
+
 on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
+
+permissions:
+  contents: write   # ★これを追加（gh-pagesへpushする権限）
 
 jobs:
   build-and-deploy:
@@ -10,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true   # ★false → true に変更（もしくは行ごと削除でもOK）
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,7 +26,6 @@ jobs:
 
       - name: Build
         run: npm run build
-        
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
