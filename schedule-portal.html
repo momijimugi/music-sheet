@@ -2814,7 +2814,16 @@
         }
 
         ensureSettingsObject();
-        applyTheme(state.settings.theme || detectPreferredTheme());
+        // ★ Portal から渡された ?theme=dark|light を最優先
+        const forced =
+          (FORCED_THEME === "light" || FORCED_THEME === "dark") ? FORCED_THEME : null;
+
+        // リモート state が来ても、forced があればそっちを使う
+        if (forced) {
+          state.settings.theme = forced; // state上も合わせる（保存はしない）
+        }
+
+        applyTheme(forced || state.settings.theme || detectPreferredTheme());
         selectedCells.clear();
         lastFocusedCell = null;
 
@@ -5593,8 +5602,11 @@ function applyGridSettingsOnce() {
         const data = ev.data;
         if (!data || typeof data !== 'object') return;
         if (data.type === 'SET_THEME' && (data.theme === 'light' || data.theme === 'dark')) {
-          setTheme(data.theme);
-        }
+          ensureSettingsObject();
+          state.settings.theme = data.theme;
+          localStorage.setItem(THEME_KEY, data.theme);
+          applyTheme(data.theme); // ★保存しない
+      }
       });
     })();
 

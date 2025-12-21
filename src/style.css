@@ -287,6 +287,10 @@ body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,"Noto
   background:rgba(255,255,255,.85);
   position:sticky;
   top:0;
+
+  z-index: 90;
+  isolation: isolate;
+
 }
 .brand{display:flex;align-items:center;gap:8px;font-weight:800}
 .pageName{font-weight:800}
