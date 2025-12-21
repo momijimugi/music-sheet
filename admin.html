@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin | Music Portal</title>
+  <script type="module" crossorigin src="/music-sheet/assets/admin-oIoRjElW.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-B0-OTnKT.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-B4G0vEhV.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/ui_common-C-_HnKRf.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/nav-Dq8S0w-t.js">
+  <link rel="stylesheet" crossorigin href="/music-sheet/assets/tabulator-fleYdbtK.css">
+  <link rel="stylesheet" crossorigin href="/music-sheet/assets/style-z1hvvY_6.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Admin</div>
+    <div id="nav" class="nav"></div>
+    <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <main class="page adminPage">
+    <div class="grid2 adminTopGrid">
+      <section class="card pad adminCreate">
+        <div class="card-head">
+          <h2>プロジェクト作成</h2>
+        </div>
+        <div class="adminCreateRow">
+          <input id="newName" placeholder="プロジェクト名" />
+          <button id="btnCreate">作成</button>
+        </div>
+        <div id="msg" class="muted"></div>
+
+        <div class="adminSectionDivider"></div>
+
+        <div class="card-head adminSubHead">
+          <h3>メンバー管理</h3>
+          <span id="memberMsg" class="muted"></span>
+        </div>
+
+        <div class="adminMemberBody">
+          <div class="adminMemberRow">
+            <div class="muted">対象プロジェクト</div>
+            <select id="memberProjectPicker" class="select"></select>
+
+            <button id="btnInitProjectDoc" class="ghost">このプロジェクトを初期化（owner/member）</button>
+            <a id="btnCopyInvite" class="btnLink" href="javascript:void(0)">招待リンクをコピー</a>
+          </div>
+
+          <div class="muted">ownerEmail</div>
+          <div id="ownerEmailView" class="pill">?</div>
+
+          <div class="muted">メンバー（memberEmails）</div>
+          <div id="memberList" class="adminMemberList"></div>
+
+          <div class="adminMemberRow">
+            <input id="memberEmailInput" class="search" placeholder="追加するメール（例: client@gmail.com）" />
+            <button id="btnAddMember" class="tbPrimary">追加</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card pad adminList">
+        <div class="card-head">
+          <h2>プロジェクト一覧</h2>
+        </div>
+        <div id="list" class="list"></div>
+      </section>
+    </div>
+
+    <section class="card pad adminSchedule">
+      <div class="card-head">
+        <div>
+          <div class="muted">All Projects</div>
+          <h2>全案件スケジュール</h2>
+        </div>
+        <a class="btnLink" id="openSchedule" target="_blank" rel="noopener">フル画面で開く</a>
+      </div>
+
+      <div class="adminScheduleGrid">
+        <iframe id="adminScheduleFrame" class="schedule-frame" src="about:blank" loading="lazy"></iframe>
+        <aside class="adminScheduleInspector">
+          <div class="muted">選択中の曲</div>
+          <div id="scheduleSelectionTitle" class="title">未選択</div>
+          <div id="scheduleSelectionMeta" class="muted"></div>
+          <a id="scheduleToSheet" class="btnLink scheduleToSheet" style="display:none;">Music Sheetへ</a>
+
+          <div class="adminLogBlock">
+            <div class="muted">監督FB</div>
+            <div id="scheduleDirectorLog" class="logBox"></div>
+          </div>
+          <div class="adminLogBlock">
+            <div class="muted">コメント</div>
+            <div id="scheduleCommentLog" class="logBox"></div>
+          </div>
+          <div class="adminLogBlock">
+            <div class="muted">参考曲</div>
+            <div id="scheduleReferencePreview" class="referencePreview"></div>
+          </div>
+          <div class="adminLogBlock">
+            <div class="muted">打ち合わせメモ（最新）</div>
+            <div id="scheduleMeetingTitle" class="title"></div>
+            <div id="scheduleMeetingMeta" class="muted"></div>
+            <div id="scheduleMeetingLog" class="logBox"></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+  </main>
+
+</body>
+</html>

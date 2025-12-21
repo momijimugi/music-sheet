@@ -1,0 +1,183 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portal | Music Portal</title>
+  <script type="module" crossorigin src="/music-sheet/assets/portal-B7sMZ6dY.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-B0-OTnKT.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-B4G0vEhV.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/ui_common-C-_HnKRf.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/nav-Dq8S0w-t.js">
+  <link rel="stylesheet" crossorigin href="/music-sheet/assets/style-z1hvvY_6.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="pageName">Portal</span>
+      <span class="projectLabel">プロジェクト名：</span>
+      <span id="portalProjectPill" class="pill projectName">?</span>
+      <select id="projectSwitcher" class="select headerSelect" style="display:none;"></select>
+    </div>
+    <div id="nav" class="nav"></div>
+    <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <main class="page portalPage">
+    <div class="portalGrid">
+      <section class="portalCol">
+        <div class="card pad portalHeader">
+          <div class="row2 portalHeaderRow">
+            <div>
+              <div class="muted">Project</div>
+              <div id="pTitle" class="title"></div>
+            </div>
+            <div class="portalActions">
+              <a class="btnLink" id="toSheet">Music Sheetへ</a>
+              <a class="btnLink" href="./admin.html">管理へ戻る</a>
+            </div>
+          </div>
+          <div id="portalGuestRow" class="portalGuestRow" style="display:none;">
+            <span class="muted">デバッグゲストモード</span>
+            <label class="portalToggle">
+              <input id="togglePortalGuest" type="checkbox">
+            </label>
+            <span id="portalGuestState" class="muted"></span>
+          </div>
+        </div>
+
+        <!-- ★ Dropbox -->
+        <div class="card pad portalDropbox">
+          <div class="card-head">
+            <h2>素材・共有リンク</h2>
+            <a id="dropboxOpen" class="btnLink" target="_blank" rel="noopener" style="display:none;">Dropboxを開く</a>
+          </div>
+
+          <div id="dropboxUnset" class="muted">Dropboxリンク：未設定</div>
+
+          <!-- adminだけ見える -->
+          <div id="dropboxAdmin" class="portalDropboxAdmin" style="display:none;">
+            <input id="dropboxUrl" class="search" placeholder="Dropbox共有リンクを貼る" />
+            <button id="btnSaveDropbox" class="tbPrimary" type="button">保存</button>
+            <button id="btnClearDropbox" class="tb" type="button">クリア</button>
+          </div>
+        </div>
+
+        <div class="card pad portalReferences">
+          <div class="card-head">
+            <h2>参考曲</h2>
+            <span id="referenceCount" class="muted"></span>
+          </div>
+          <div id="referenceUnset" class="muted">参考曲リンク：未設定</div>
+          <div id="referenceList" class="referenceGrid"></div>
+          <div id="referenceAdmin" class="referenceAdmin" style="display:none;">
+            <input id="referenceInput" class="search" placeholder="YouTube / Apple Music / Spotify のリンク" />
+            <button id="btnAddReference" class="tbPrimary" type="button">追加</button>
+            <span id="referenceMsg" class="muted"></span>
+          </div>
+        </div>
+      </section>
+
+      <section class="portalCol">
+        
+
+        <!-- ★ 打ち合わせメモ（Notion風トグル） -->
+        <div class="card pad portalEditor">
+          <details id="meetingToggle" open class="toggle">
+            <summary class="toggleSummary">
+              <span>打ち合わせメモ</span>
+              <span class="muted">（クリックで開閉）</span>
+            </summary>
+
+            <div class="toggleBody">
+              <div class="meetingTitleRow">
+                <input id="meetingTitle" class="search" placeholder="タイトル（例：12/19 監督FBまとめ）" />
+              </div>
+              <div class="toolbar">
+                <button class="tb" data-cmd="bold"><b>B</b></button>
+                <button class="tb" data-cmd="italic"><i>I</i></button>
+                <button class="tb" data-cmd="underline"><u>U</u></button>
+                <span class="sep"></span>
+                <button class="tb" data-cmd="insertUnorderedList">● リスト</button>
+                <button class="tb" data-cmd="insertOrderedList">1. リスト</button>
+                <span class="sep"></span>
+                <button class="tb" id="btnMeetingClear">クリア</button>
+
+                <div class="portalSpacer"></div>
+                <button id="btnSave" class="tbPrimary">保存</button>
+                <span id="msg" class="muted"></span>
+              </div>
+
+              <div id="meetingEditor" class="editor" contenteditable="true" spellcheck="false"
+                   data-placeholder="議事録を貼り付けたり、要点を箇条書きしたり。Ctrl+Bで太字もOK。"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="card pad portalLatest">
+          <div class="card-head">
+            <div>
+              <h2>打ち合わせメモ（最新）</h2>
+              <span id="latestMeta" class="muted"></span>
+            </div>
+
+            <div class="portalActions">
+              <button id="btnArchiveLatest" class="ghost" type="button">アーカイブ</button>
+              <button id="btnDeleteLatest" class="ghost danger" type="button">消去</button>
+            </div>
+          </div>
+
+          <div id="latestMeeting" class="logBox"></div>
+        </div>
+
+        <div class="card pad portalHistory">
+          <div class="card-head">
+            <h2>過去ログ</h2>
+
+            <label class="muted portalToggle">
+              <input id="showArchived" type="checkbox">
+              アーカイブも表示
+            </label>
+          </div>
+
+          <div id="meetingHistory" class="historyGrid"></div>
+        </div>
+      </section>
+
+      <section class="card pad portalSchedule">
+        <div class="card-head">
+          <h2>スケジュール</h2>
+          <a class="btnLink" id="openSchedule" href="./schedule-portal.html" target="_blank" rel="noopener">フル画面で開く</a>
+        </div>
+
+        <iframe id="scheduleFrame" class="schedule-frame" src="about:blank" loading="lazy"></iframe>
+      </section>
+
+      <section class="card pad portalPdf">
+        <div class="card-head">
+          <h2>スケジュールPDF</h2>
+          <a id="pdfOpen" class="btnLink" target="_blank" rel="noopener" style="display:none;">PDFを開く</a>
+        </div>
+        <div id="pdfUnset" class="muted">PDFリンク：未設定</div>
+        <div id="pdfViewer" class="pdfViewer" style="display:none;"></div>
+        <div id="pdfAdmin" class="portalPdfAdmin" style="display:none;">
+          <input id="pdfUrl" class="search" placeholder="Dropbox / Google Drive のPDFリンク" />
+          <button id="btnSavePdf" class="tbPrimary" type="button">保存</button>
+          <button id="btnClearPdf" class="tb" type="button">クリア</button>
+          <span id="pdfMsg" class="muted"></span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+
+</body>
+</html>
+
+

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sheet | Music Portal</title>
+  <script type="module" crossorigin src="/music-sheet/assets/sheet-B6mi09hL.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-B0-OTnKT.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-B4G0vEhV.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/ui_common-C-_HnKRf.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/nav-Dq8S0w-t.js">
+  <link rel="stylesheet" crossorigin href="/music-sheet/assets/style-z1hvvY_6.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="pageName">Music Sheet</span>
+      <span class="projectLabel">プロジェクト名：</span>
+      <span id="projectNamePill" class="pill projectName">?</span>
+      <select id="projectSwitcher" class="select headerSelect" style="display:none;"></select>
+    </div>
+    <div id="nav" class="nav"></div>
+
+    <div class="actions">
+      <span id="lastUpdated" class="pill">更新: --</span>
+      <span id="userPill" class="pill">未ログイン</span>
+      <button id="btnThemeToggle" class="ghost" type="button">テーマ: ライト</button>
+      <button id="btnLogin">Googleでログイン</button>
+      <button id="btnLogout" style="display:none;">ログアウト</button>
+    </div>
+  </header>
+
+  <!-- ✅ ここが必要：Music Sheet の実DOM -->
+  <div class="layout" id="layout">
+    <div class="card">
+      <div class="cardHead">
+        <div class="left">
+          <input id="projectId" style="display:none;" />
+          <input id="q" class="search" placeholder="検索（scene / memo / FB など）" />
+          <select id="statusFilter" class="select">
+            <option value="">進捗：すべて</option>
+          </select>
+          <span class="msg" id="msg"></span>
+        </div>
+
+        <div class="right">
+          <button id="btnToggleInspector" class="ghost" type="button">詳細を開く</button>
+          <button id="btnSettings" class="ghost" type="button">設定</button>
+          <button id="btnUndo" type="button" class="ghost">Undo</button>
+          <button id="btnAddRow" type="button">＋行を追加</button>
+          <button id="btnDeleteRow" type="button" class="ghost">- 行を削除</button>
+        </div>
+      </div>
+
+      <div id="grid"></div>
+    </div>
+
+    <div class="divider" id="divider" title="ドラッグで幅変更"></div>
+
+    <div class="card" id="inspector">
+      <div class="insHead">
+        <div class="title">詳細</div>
+        <div id="selMeta" class="muted selMetaEmpty">行を選択すると表示されます</div>
+      </div>
+
+      <div class="insBody">
+        <div class="insTabs">
+          <button class="insTab is-active" data-tab="fb" type="button">監督FB</button>
+          <button class="insTab" data-tab="comment" type="button">コメント</button>
+          <button class="insTab" data-tab="reference" type="button">参考曲</button>
+          <button class="insTab" data-tab="status" type="button">ステータス</button>
+          <button class="insTab" data-tab="timecode" type="button">時間</button>
+        </div>
+
+        <section class="insTabPanel is-active" data-tab="fb">
+          <div class="row2">
+            <div>
+              <label>新しいFBを追加<textarea id="f_director_new"></textarea></label>
+              <div class="insActions">
+                <button id="btnAddDirectorFB" type="button">FBを追加（履歴に積む）</button>
+              </div>
+
+              <label>参考曲 <input id="f_reference_shared" placeholder="YouTube / Spotify などのリンク" /></label>
+              <div id="referencePreviewShared" class="referencePreview"></div>
+
+              <label>監督FB（履歴）</label>
+              <div class="insToggleRow">
+                <span class="toggleLabel muted">アーカイブも表示</span>
+                <label class="portalToggle">
+                  <input id="showDirectorArchived" type="checkbox">
+                </label>
+              </div>
+              <div id="directorLog" class="logBox"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="insTabPanel" data-tab="comment">
+          <div class="row2">
+            <div>
+              <label>新しいコメントを追加<textarea id="f_comment_new"></textarea></label>
+              <div class="insActions">
+                <button id="btnAddComment" type="button">コメントを追加</button>
+              </div>
+
+              <label>コメント（履歴）</label>
+              <div class="insToggleRow">
+                <span class="toggleLabel muted">アーカイブも表示</span>
+                <label class="portalToggle">
+                  <input id="showCommentArchived" type="checkbox">
+                </label>
+              </div>
+              <div id="commentLog" class="logBox"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="insTabPanel" data-tab="reference">
+          <div class="row2">
+            <div>
+              <label>参考曲 <input id="f_reference" placeholder="YouTube / Spotify などのリンク" /></label>
+              <div id="referencePreview" class="referencePreview"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="insTabPanel" data-tab="status">
+          <div class="row2">
+            <label>長さ <select id="f_len" class="select"></select></label>
+            <label>進捗
+              <div class="tagSelectWrap">
+                <select id="f_status" class="select"></select>
+                <span id="statusTagPreview" class="tagPill">?</span>
+              </div>
+            </label>
+          </div>
+          <div class="row2">
+            <label class="spanAll">更新メモ（任意） <input id="f_note" /></label>
+          </div>
+        </section>
+
+        <section class="insTabPanel" data-tab="timecode">
+          <div class="row3">
+            <label>IN timecode <input id="f_in" placeholder="HH:MM:SS:FF" /></label>
+            <label>OUT timecode <input id="f_out" placeholder="HH:MM:SS:FF" /></label>
+            <label>INTERVAL <input id="f_interval" disabled /></label>
+          </div>
+        </section>
+
+        <div class="insFooter">
+          <button id="btnSaveDetail" type="button">詳細を保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div id="overlay" class="overlay hidden"></div>
+  <div id="statusModal" class="modal hidden">
+    <div class="modalHead">
+      <div class="modalTitle">設定</div>
+      <button id="btnCloseStatus" class="ghost" type="button">閉じる</button>
+    </div>
+    <div class="modalBody">
+      <div class="settingsGrid">
+        <section class="settingsSection">
+          <div class="settingsTitle">基本設定</div>
+          <label class="toggleRow portalToggle">
+            <input id="toggleBulk" type="checkbox">
+            <span>一括編集</span>
+            <span id="bulkState" class="muted">OFF</span>
+          </label>
+          <label class="toggleRow portalToggle">
+            <input id="toggleGuest" type="checkbox">
+            <span>デバッグ用ゲストモード</span>
+            <span id="guestState" class="muted"></span>
+          </label>
+          <label>フレームレート
+            <select id="fpsDefault" class="select" title="フレームレート（このシート共通）">
+              <option value="24">24</option>
+              <option value="25">25</option>
+              <option value="30">30</option>
+            </select>
+          </label>
+          <div class="muted settingsNote">※ゲストは変更できません</div>
+        </section>
+        <section class="settingsSection">
+          <div class="settingsTitle">進捗設定</div>
+          <div id="statusList" class="statusList"></div>
+          <div class="modalActions">
+            <button id="btnAddStatus" type="button">＋追加</button>
+            <button id="btnSaveStatuses" type="button">保存</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ✅ sheet専用JS -->
+</body>
+</html>
+
+
+
