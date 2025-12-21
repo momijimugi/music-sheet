@@ -14,6 +14,7 @@ export default defineConfig(({ command }) => ({
   build: {
     rollupOptions: {
       input: {
+        index: resolve(__dirname, "index.html"),
         admin: resolve(__dirname, "admin.html"),
         portal: resolve(__dirname, "portal.html"),
         sheet: resolve(__dirname, "sheet.html"),
