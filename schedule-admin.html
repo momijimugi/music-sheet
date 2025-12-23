@@ -1695,11 +1695,10 @@
       <div>
         <div class="section-label">ページ移動</div>
         <div class="sidebar-controls" id="navButtons">
-          <button class="btn btn-soft" data-nav-href="index.html"><span class="icon">🏠</span> Home</button>
-          <button class="btn btn-soft" data-nav-href="portal.html"><span class="icon">🏠</span> Portal</button>
-          <button class="btn btn-soft" data-nav-href="schedule-admin.html"><span class="icon">🗓</span> Schedule</button>
-          <button class="btn btn-soft" data-nav-href="tasks.html"><span class="icon">✅</span> Tasks</button>
-          <button class="btn btn-soft" data-nav-href="memo.html"><span class="icon">📝</span> Memo</button>
+          <button class="btn btn-soft" data-nav-page="home"><span class="icon">🏠</span> Home</button>
+          <button class="btn btn-soft" data-nav-page="admin"><span class="icon">👑</span> Admin</button>
+          <button class="btn btn-soft" data-nav-page="portal"><span class="icon">🚪</span> Portal</button>
+          <button class="btn btn-soft" data-nav-page="sheet"><span class="icon">📄</span> Sheet</button>
         </div>
         <div style="font-size:0.72rem; color:var(--text-muted); margin-top:4px; line-height:1.5;">
           ※ファイル名はあなたの構成に合わせて変更してOK
@@ -1861,7 +1860,8 @@
     import { doc, getDoc, setDoc, onSnapshot, serverTimestamp, collection, collectionGroup, query, orderBy, updateDoc } from "firebase/firestore";
 
     const URL_PARAMS = new URLSearchParams(location.search);
-    const IS_EMBED = false;
+    const IS_EMBED = URL_PARAMS.has('embed');
+    if (IS_EMBED) document.body.classList.add('embedded');
     const FORCED_THEME = URL_PARAMS.get('theme'); // 'light' | 'dark' | null
     const SCOPE = 'all';
     const IS_ALL_SCOPE = true;
@@ -2366,6 +2366,9 @@
 
       if (IS_EMBED) {
         document.body.classList.add('embedded');
+      }
+      if (FORCE_CLIENT_VIEW) {
+        document.body.classList.add('client-view-mode');
       }
       if (FORCED_THEME === 'light' || FORCED_THEME === 'dark') {
         setTheme(FORCED_THEME);
@@ -4238,6 +4241,43 @@
       // 曲の並び替え（案件内で上下）
     }
 
+    function toggleProjectCollapseUI(projectId, isCollapsed) {
+        const toggle = document.querySelector(`.project-group-row[data-project-id="${projectId}"] .project-group-toggle`);
+        if (toggle) {
+            toggle.textContent = isCollapsed ? '▶' : '▼';
+        }
+
+        const project = state.projects.find(p => p.id === projectId);
+        if (!project) return;
+        const trackIds = new Set((project.tracks || []).map(t => t.id));
+        if (!trackIds.size) return;
+
+        const leftGroupRow = document.querySelector(`#gridLeftPane .project-group-row[data-project-id="${projectId}"]`);
+        if (leftGroupRow) {
+            let nextRow = leftGroupRow.nextElementSibling;
+            while(nextRow && !nextRow.classList.contains('project-group-row')) {
+                const rowHeaderCell = nextRow.querySelector('.row-header-cell');
+                if (rowHeaderCell && trackIds.has(rowHeaderCell.dataset.trackId)) {
+                    nextRow.style.display = isCollapsed ? 'none' : 'table-row';
+                }
+                nextRow = nextRow.nextElementSibling;
+            }
+        }
+
+        const rightGroupRow = document.querySelector(`#gridRightPane .project-group-spacer[data-project-id="${projectId}"]`);
+        if (rightGroupRow) {
+            let nextRow = rightGroupRow.nextElementSibling;
+            while(nextRow && !nextRow.classList.contains('project-group-spacer')) {
+                const firstCell = nextRow.querySelector('.cell');
+                if (firstCell && trackIds.has(firstCell.dataset.trackId)) {
+                    nextRow.style.display = isCollapsed ? 'none' : 'table-row';
+                }
+                nextRow = nextRow.nextElementSibling;
+            }
+        }
+        syncRowHeights();
+    }
+
     function attachProjectGroupEvents() {
       document.querySelectorAll('.project-group-row').forEach(row => {
         const projectId = row.dataset.projectId;
@@ -4251,7 +4291,11 @@
             pushUndo();
             project.collapsed = !project.collapsed;
             saveState();
-            renderGrid(); // グリッドのみ再描画
+            if (IS_ALL_SCOPE) {
+                toggleProjectCollapseUI(project.id, project.collapsed);
+            } else {
+                renderGrid(); // グリッドのみ再描画
+            }
           });
         }
 
@@ -4635,10 +4679,13 @@
 
       pushUndo();
 
+      const updatedCoords = [];
+      const dirtyTracks = new Set();
       for (let r = 0; r < height; r++) {
         const targetRow = anchor.rowIndex + r;
         if (!currentRows[targetRow]) continue;
         const trackId = currentRows[targetRow].track.id;
+        dirtyTracks.add(trackId);
 
         for (let c = 0; c < width; c++) {
           const targetCol = anchor.colIndex + c;
@@ -4653,11 +4700,24 @@
           } else {
             delete state.schedule[trackId][dateIso];
           }
+          updatedCoords.push({trackId, dateIso, value});
         }
       }
+      dirtyTracks.forEach(id => markDirtyFromTrackId(id));
 
       saveState();
-      renderGrid();
+      
+      if (IS_ALL_SCOPE) {
+        updatedCoords.forEach(({trackId, dateIso, value}) => {
+          const el = document.querySelector(`.cell-select[data-track-id="${trackId}"][data-date="${dateIso}"]`);
+          if (el) {
+            el.value = value || '';
+            styleCellSelect(el);
+          }
+        });
+      } else {
+        renderGrid();
+      }
     }
 
     function clearSelectedCells() {
@@ -4673,14 +4733,28 @@
 
       pushUndo();
 
+      const dirtyTracks = new Set();
       coords.forEach(c => {
         if (state.schedule[c.trackId]) {
           delete state.schedule[c.trackId][c.date];
         }
+        dirtyTracks.add(c.trackId);
       });
+      dirtyTracks.forEach(id => markDirtyFromTrackId(id));
 
       saveState();
-      renderGrid();
+      
+      if (IS_ALL_SCOPE) {
+        coords.forEach(c => {
+          const el = document.querySelector(`.cell-select[data-track-id="${c.trackId}"][data-date="${c.date}"]`);
+          if (el) {
+            el.value = '';
+            styleCellSelect(el);
+          }
+        });
+      } else {
+        renderGrid();
+      }
     }
 
     function doExportBackup() {
@@ -4908,10 +4982,38 @@
     function setupEvents() {
 
       // ページ移動ボタン
-      document.querySelectorAll('[data-nav-href]').forEach(btn => {
+      document.querySelectorAll('[data-nav-page]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const href = btn.getAttribute('data-nav-href');
-          if (href) location.href = href;
+          const page = btn.dataset.navPage;
+          if (!page) return;
+
+          let url = '';
+          // BASE is defined at the top of the script
+          
+          if (page === 'home') {
+            url = `${BASE}index.html`;
+          } else if (page === 'admin') {
+            url = `${BASE}admin.html`;
+          } else if (page === 'portal') {
+            url = `${BASE}portal.html`;
+          } else if (page === 'sheet') {
+            url = `${BASE}sheet.html`;
+          } else {
+            return;
+          }
+          
+          if (page === 'portal' || page === 'sheet') {
+            let pid = selectedProjectId || localStorage.getItem("lastProject") || '';
+            if (!pid) {
+                pid = prompt("プロジェクトIDを入力してください")?.trim();
+                if (!pid) return;
+            }
+            localStorage.setItem("lastProject", pid);
+            url += `?project=${encodeURIComponent(pid)}`;
+          }
+
+          const target = IS_EMBED ? window.top : window;
+          target.location.href = url;
         });
       });
 
@@ -5450,7 +5552,15 @@
       markDirtyProjectId(trackMemoState.projectId);
       saveState();
       closeTrackMemoEditor();
-      renderGrid();
+
+      if (IS_ALL_SCOPE) {
+        const btn = document.querySelector(`.row-header-memo-btn[data-track-id="${trackMemoState.trackId}"]`);
+        if (btn) {
+          btn.title = newMemo || 'メモ未設定';
+        }
+      } else {
+        renderGrid();
+      }
     }
 
     function openCellNoteEditor(trackId, dateIso) {
@@ -5493,7 +5603,21 @@
       markDirtyFromTrackId(cellNoteState.trackId);
       saveState();
       closeCellNoteEditor();
-      renderGrid();
+
+      if (IS_ALL_SCOPE) {
+        const cell = document.querySelector(`.cell[data-track-id="${cellNoteState.trackId}"][data-date="${cellNoteState.dateIso}"]`);
+        if (cell) {
+            if (newNote) {
+                cell.classList.add('has-note');
+                cell.title = newNote;
+            } else {
+                cell.classList.remove('has-note');
+                cell.title = '';
+            }
+        }
+      } else {
+        renderGrid();
+      }
     }
     // --- 日次ロール（毎日 4:00 に「今日」スタート＆過去セル削除）関連 ---
 

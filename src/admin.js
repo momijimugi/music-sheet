@@ -1055,9 +1055,6 @@ async function initAdmin() {
     scheduleUpdatedAt = latestAt;
     scheduleUpdatedBy = latestBy;
     updateHeaderUpdated();
-    if (tsValue(latestAt) > tsValue(prevAt)) {
-      setScheduleFrameAll(tsValue(latestAt));
-    }
   });
 
   setScheduleFrameAll();

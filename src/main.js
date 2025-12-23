@@ -994,6 +994,11 @@ function nextMNumber() {
 let selectedId = null;
 
 function setInspector(row){
+  const directorInput = $("f_director_new");
+  const directorBtn = $("btnAddDirectorFB");
+  const commentInput = $("f_comment_new");
+  const commentBtn = $("btnAddComment");
+
   if(!row){
     selectedId = null;
     if ($("selMeta")) {
@@ -1002,24 +1007,39 @@ function setInspector(row){
     }
     renderDirectorLog([]);
     renderCommentLog([]);
-    $("f_director_new").value = "";
-    $("f_comment_new").value = "";
+    if (directorInput) {
+      directorInput.value = "";
+      directorInput.disabled = true;
+    }
+    if (directorBtn) directorBtn.disabled = true;
+    if (commentInput) {
+      commentInput.value = "";
+      commentInput.disabled = true;
+    }
+    if (commentBtn) commentBtn.disabled = true;
+
     setReferenceValue("");
     $("f_in").value = "";
     $("f_out").value = "";
     $("f_interval").value = "";
     return;
   }
-    const d = row.getData();
-    selectedId = d.id;
-    if ($("selMeta")) {
-      const parts = [];
-      if (d.m != null && String(d.m).trim() !== "") parts.push(`#M ${d.m}`);
-      if (d.demo) parts.push(String(d.demo).trim());
-      const label = parts.length ? parts.join(" / ") : "選択中の行";
-      $("selMeta").textContent = `選択中: ${label}`;
-      $("selMeta").classList.remove("selMetaEmpty");
-    }
+
+  if (directorInput) directorInput.disabled = !canEditDirector();
+  if (directorBtn) directorBtn.disabled = !canEditDirector();
+  if (commentInput) commentInput.disabled = !canEditComment();
+  if (commentBtn) commentBtn.disabled = !canEditComment();
+
+  const d = row.getData();
+  selectedId = d.id;
+  if ($("selMeta")) {
+    const parts = [];
+    if (d.m != null && String(d.m).trim() !== "") parts.push(`#M ${d.m}`);
+    if (d.demo) parts.push(String(d.demo).trim());
+    const label = parts.length ? parts.join(" / ") : "選択中の行";
+    $("selMeta").textContent = `選択中: ${label}`;
+    $("selMeta").classList.remove("selMetaEmpty");
+  }
   if ($("f_m")) $("f_m").value = d.m ?? "";
   if ($("f_v")) $("f_v").value = d.v ?? "";
   if ($("f_demo")) $("f_demo").value = d.demo ?? "";
@@ -1034,8 +1054,8 @@ function setInspector(row){
   $("f_interval").value = d.interval ?? calcInterval(d.in || "", d.out || "", fps);
   renderDirectorLog(d.directorLog || []);
   renderCommentLog(d.commentLog || []);
-  $("f_director_new").value = "";
-  $("f_comment_new").value = "";
+  if(directorInput) directorInput.value = d.director || "";
+  if(commentInput) commentInput.value = d.comment || "";
 }
 
 const inspectorTabs = Array.from(document.querySelectorAll(".insTab"));
@@ -1532,6 +1552,7 @@ table.on("rowMoved", async () => {
 
 function listen(projectId){
   if(unsub) unsub();
+  let isInitialLoad = true;
   currentProjectId = projectId;
   listenUISettings(projectId);
   listenScheduleBoard(projectId);
@@ -1558,6 +1579,7 @@ function listen(projectId){
       lastCueUpdatedBy = latestBy;
       updateHeaderUpdated();
     }
+    
     if(pendingSelectId){
       const r = table.getRow(pendingSelectId);
       if(r){
@@ -1565,7 +1587,18 @@ function listen(projectId){
         setInspector(r);
         pendingSelectId = null;
       }
+    } else if (isInitialLoad && rows.length > 0) {
+      const firstRow = table.getRow(rows[0].id);
+      if (firstRow) {
+          firstRow.select();
+          setInspector(firstRow);
+      }
     }
+
+    if (isInitialLoad) {
+      isInitialLoad = false;
+    }
+
     msg("");
   }, (err) => {
     console.error(err);
@@ -1706,65 +1739,84 @@ $("btnDeleteRow")?.addEventListener("click", async (e) => {
   }
 });
 
-// 詳細保存（未選択なら新規行を作る）
-$("btnSaveDetail").onclick = async () => {
-  if(!currentUser){ msg("ログインしてね"); return; }
+// Auto-save logic for inspector fields
+let debouncedSaveTimeouts = {};
+function debouncedSave(field, value) {
+    if (!selectedId) return;
 
-  const fps = (window.__FPS_DEFAULT__ || "24");
-  const inTc = $("f_in").value.trim() || "";
-  const outTc = $("f_out").value.trim() || "";
-  const interval = calcInterval(inTc, outTc, fps);
-  $("f_interval").value = interval;
-
-  const rowData = selectedId ? table.getRow(selectedId)?.getData?.() : {};
-  const mValue = $("f_m") ? $("f_m").value.trim() : (rowData?.m ?? "");
-  const vValue = $("f_v") ? $("f_v").value.trim() : (rowData?.v ?? "");
-  const demoValue = $("f_demo") ? $("f_demo").value.trim() : (rowData?.demo ?? "");
-  const sceneValue = $("f_scene") ? $("f_scene").value.trim() : (rowData?.scene ?? "");
-  const referenceValue = getReferenceValue().trim();
-
-  const fullPatch = {
-    m: mValue || null,
-    v: vValue || null,
-    demo: demoValue || "",
-    scene: sceneValue || "",
-    status: $("f_status").value.trim() || "",
-    len: $("f_len").value.trim() || "",
-    note: $("f_note").value || "",
-    reference: referenceValue,
-    in: inTc,
-    out: outTc,
-    interval,
-    updatedAt: serverTimestamp(),
-    updatedBy: who(),
-  };
-  const patch = canEditAll()
-    ? fullPatch
-    : {
-        reference: referenceValue,
-        updatedAt: serverTimestamp(),
-        updatedBy: who(),
-      };
-
-  try{
-    if(!selectedId){
-      if (!canEditAll()) {
-        msg("ゲストは新規行を作成できません");
+    const isGuest = !!currentUser && !canEditAll();
+    const guestFields = ['reference'];
+    if (isGuest && !guestFields.includes(field)) {
         return;
-      }
-      await addDoc(collection(db,"projects",currentProjectId,"cues"),{
-        ...patch, createdAt: serverTimestamp(), createdBy: who()
-      });
-      msg("新規行を作って保存しました");
-    }else{
-      await updateDoc(doc(db,"projects",currentProjectId,"cues",selectedId), patch);
-      msg("保存しました");
     }
-  }catch(e){
-    console.error(e);
-    msg(`保存失敗: ${e.code || e.message}`);
-  }
+
+    if (debouncedSaveTimeouts[field]) {
+        clearTimeout(debouncedSaveTimeouts[field]);
+    }
+    debouncedSaveTimeouts[field] = setTimeout(() => {
+        const patch = {
+            [field]: value,
+            updatedAt: serverTimestamp(),
+            updatedBy: who(),
+        };
+
+        if (field === 'in' || field === 'out') {
+            const row = table.getRow(selectedId)?.getData?.() || {};
+            const inTc = (field === 'in') ? value : (row.in || "");
+            const outTc = (field === 'out') ? value : (row.out || "");
+            const fps = (window.__FPS_DEFAULT__ || "24");
+            const interval = calcInterval(inTc, outTc, fps);
+            patch.interval = interval;
+            // also update the UI for interval
+            const intervalInput = $("f_interval");
+            if (intervalInput) intervalInput.value = interval;
+        }
+        
+        const ref = doc(db, "projects", currentProjectId, "cues", selectedId);
+        updateDoc(ref, patch).then(() => {
+            msg("自動保存しました");
+            setTimeout(() => msg(""), 1200);
+        }).catch(err => {
+            console.error(err);
+            msg(`自動保存エラー: ${err.code || err.message}`);
+        });
+
+    }, 750);
+}
+
+const autoSaveFields = {
+    "f_director_new": "director",
+    "f_comment_new": "comment",
+    "f_status": "status",
+    "f_len": "len",
+    "f_note": "note",
+    "f_in": "in",
+    "f_out": "out",
 };
+
+for (const [id, field] of Object.entries(autoSaveFields)) {
+    const el = $(id);
+    if (!el) continue;
+    const eventType = (el.tagName === 'SELECT') ? 'change' : 'input';
+    el.addEventListener(eventType, (e) => {
+        debouncedSave(field, e.target.value);
+    });
+}
+
+// Special handling for synced reference inputs
+const refMain = $("f_reference");
+const refShared = $("f_reference_shared");
+const refHandler = (e) => {
+    const val = e.target.value;
+    setReferenceValue(val, e.target.id);
+    debouncedSave("reference", val);
+};
+if (refMain) refMain.addEventListener("input", refHandler);
+if (refShared) refShared.addEventListener("input", refHandler);
+
+// Hide the now-redundant save button
+const btnSaveDetail = $("btnSaveDetail");
+if(btnSaveDetail) btnSaveDetail.style.display = 'none';
 
 $("btnAddDirectorFB")?.addEventListener("click", async ()=>{
   if(!currentUser){ msg("ログインしてね"); return; }
@@ -1897,7 +1949,7 @@ window.addEventListener("keydown", (e) => {
 
   if(mod && e.key.toLowerCase() === "s"){
     e.preventDefault();
-    document.getElementById("btnSaveDetail")?.click();
+    // Auto-save is now implemented, so manual save shortcut is disabled.
   }
   if(mod && e.key.toLowerCase() === "n"){
     e.preventDefault();
@@ -1960,14 +2012,24 @@ $("btnSaveStatuses")?.addEventListener("click", async () => {
   await saveStatuses();
 });
 
-$("f_status")?.addEventListener("change", updateStatusPreview);
+$("f_status")?.addEventListener("change", () => {
+    updateStatusPreview();
+    debouncedSave("status", $("f_status").value);
+});
+$("f_len")?.addEventListener("change", () => debouncedSave("len", $("f_len").value));
+$("f_note")?.addEventListener("input", () => debouncedSave("note", $("f_note").value));
+$("f_in")?.addEventListener("input", () => debouncedSave("in", $("f_in").value));
+$("f_out")?.addEventListener("input", () => debouncedSave("out", $("f_out").value));
+
 document.getElementById("f_reference")?.addEventListener("input", (e) => {
   const v = e.target?.value || "";
   setReferenceValue(v, "f_reference");
+  debouncedSave("reference", v);
 });
 document.getElementById("f_reference_shared")?.addEventListener("input", (e) => {
   const v = e.target?.value || "";
   setReferenceValue(v, "f_reference_shared");
+  debouncedSave("reference", v);
 });
 
 
