@@ -2,105 +2,212 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --- auth helpers ---
     function signedIn() {
       return request.auth != null;
     }
 
-    // まずプロジェクト内メンバー判定（members/{uid} が存在する）
-    function isMember(pid) {
+    function tokenEmail() {
+      return (request.auth.token.email is string)
+        ? request.auth.token.email.lower()
+        : "";
+    }
+
+    function identityEmail() {
+      return request.auth.token.firebase is map
+        && request.auth.token.firebase.identities is map
+        && request.auth.token.firebase.identities.email is list
+        && request.auth.token.firebase.identities.email.size() > 0
+        ? request.auth.token.firebase.identities.email[0].lower()
+        : "";
+    }
+
+    function emailLower() {
+      return tokenEmail().size() > 0 ? tokenEmail() : identityEmail();
+    }
+
+    function hasEmail() {
+      return emailLower().size() > 0;
+    }
+
+    // ★ここをあなたの管理者に合わせて更新してOK（UID or email）
+    function isAdmin() {
+      return signedIn() && (
+        request.auth.uid in [
+          "zXEgjnr3eEMXmhj1TssQDmCfblg1"
+        ]
+        || (
+          hasEmail()
+          && emailLower() in ["dmikorogi@gmail.com"]
+        )
+      );
+    }
+
+    // --- users (profiles) ---
+    match /users/{uid} {
+      // 本人は自分のprofileを読み書きできる
+      allow read, create: if signedIn() && request.auth.uid == uid;
+
+      // update：本人 or 管理者（BANを手動で変える余地を残す）
+      allow update: if (signedIn() && request.auth.uid == uid) || isAdmin();
+
+      // deleteは基本禁止（必要なら後で）
+      allow delete: if false;
+    }
+
+    // --- project membership helpers ---
+    function projectDoc(pid) {
+      return get(/databases/$(database)/documents/projects/$(pid)).data;
+    }
+
+    // ownerUid（新）/ ownerEmail（旧）どちらでもowner判定できるようにする
+    function isOwner(pid) {
+      return isAdmin()
+        || (
+          signedIn()
+          && (
+            (projectDoc(pid).ownerUid is string && projectDoc(pid).ownerUid == request.auth.uid)
+            || (
+              hasEmail()
+              && projectDoc(pid).ownerEmail is string
+              && projectDoc(pid).ownerEmail.lower() == emailLower()
+            )
+          )
+        );
+    }
+
+    function hasMemberDoc(pid) {
       return signedIn()
         && exists(/databases/$(database)/documents/projects/$(pid)/members/$(request.auth.uid));
     }
 
-    function isOwner(pid) {
+    // 旧構造（members配列 / roleByUid map）も一応残しておく（移行中でも壊れないため）
+    function hasLegacyMember(pid) {
       return signedIn()
-        && get(/databases/$(database)/documents/projects/$(pid)).data.ownerUid == request.auth.uid;
+        && (
+          (projectDoc(pid).members is list && request.auth.uid in projectDoc(pid).members)
+          || (projectDoc(pid).roleByUid is map && request.auth.uid in projectDoc(pid).roleByUid)
+        );
     }
 
-    // users: 自分のプロフィールだけ読める/更新できる
-    match /users/{uid} {
-      allow read, create, update: if signedIn() && request.auth.uid == uid;
+    function isMember(pid) {
+      return isOwner(pid) || hasMemberDoc(pid) || hasLegacyMember(pid);
     }
 
+    // --- projects ---
     match /projects/{pid} {
-      // project本体
-      allow read: if isMember(pid) || isOwner(pid);
-      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      // 読み取り：メンバー/オーナー/管理者
+      allow read: if isMember(pid);
+
+      // 作成：ログインしていて、ownerUidが自分（推奨）
+      // （旧ownerEmailも一応許可）
+      allow create: if signedIn() && (
+        (request.resource.data.ownerUid is string && request.resource.data.ownerUid == request.auth.uid)
+        || (
+          hasEmail()
+          && request.resource.data.ownerEmail is string
+          && request.resource.data.ownerEmail.lower() == emailLower()
+        )
+      );
+
+      // 更新/削除：オーナー/管理者のみ
       allow update, delete: if isOwner(pid);
 
-      // members: 参加者一覧
+      // --- members ---
       match /members/{uid} {
-        allow read: if isMember(pid) || isOwner(pid);
+        // 参照：プロジェクトのメンバーなら見える（招待の一覧表示などで必要）
+        allow read: if isMember(pid);
 
-        // ownerが管理（追加/削除/更新）
+        // 追加：オーナー/管理者はいつでもOK
+        //      招待された本人は「自分のuidのドキュメント」を作れる（join）
+        allow create: if isOwner(pid)
+          || (
+            signedIn()
+            && uid == request.auth.uid
+            && request.resource.data.role == "member"
+            && (
+              (request.resource.data.uid is string && request.resource.data.uid == request.auth.uid)
+              || (request.resource.data.memberUid is string && request.resource.data.memberUid == request.auth.uid)
+            )
+            && request.resource.data.inviteId is string
+            && exists(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId))
+            && hasEmail()
+            && get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.emailLower == emailLower()
+            && get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.usedBy == null
+          );
+
+        // 更新/削除：オーナー/管理者のみ
         allow update, delete: if isOwner(pid);
-
-        // 招待から参加（本人が自分のuidで作る）
-        // inviteドキュメントの emailLower と auth.email を突合
-        allow create: if signedIn()
-          && request.auth.uid == uid
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.inviteId is string
-          && get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.usedBy == null
-          && request.auth.token.email.lower() ==
-             get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.emailLower;
       }
 
-      // invites: ownerが作る/管理。招待された本人が「受諾更新」だけできる
+      // --- invites ---
       match /invites/{inviteId} {
-        allow read, create, delete: if isOwner(pid);
+        // 参照：オーナー/管理者 or 招待メール本人
+        allow read: if isOwner(pid)
+          || (signedIn() && hasEmail() && resource.data.emailLower == emailLower());
 
-        // ownerは自由に更新可
+        // 作成/削除：オーナー/管理者のみ
+        allow create, delete: if isOwner(pid);
+
+        // 更新：
+        // - オーナー/管理者 は自由
+        // - 招待された本人は usedBy/usedAt だけ更新して「受諾」できる
         allow update: if isOwner(pid)
           || (
             signedIn()
-            && request.auth.token.email.lower() == resource.data.emailLower
+            && hasEmail()
+            && resource.data.emailLower == emailLower()
             && resource.data.usedBy == null
             && request.resource.data.usedBy == request.auth.uid
             && request.resource.data.usedAt is timestamp
-            // 変更キーを usedBy, usedAt のみに縛る
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy','usedAt'])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["usedBy","usedAt"])
           );
       }
 
-      // cues: メンバーは読み書きOK
+      // --- cues ---
       match /cues/{cueId} {
-        allow read, write: if isMember(pid) || isOwner(pid);
+        allow read, write: if isMember(pid);
       }
 
-      // settings / portal / scheduleBoard など：全部メンバーOKに統一
+      // --- settings ---
       match /settings/{docId} {
-        allow read, write: if isMember(pid) || isOwner(pid);
+        allow read, write: if isMember(pid);
       }
 
-      match /portal/{docId} {
-        allow read, write: if isMember(pid) || isOwner(pid);
-      }
-
+      // --- scheduleBoard ---
       match /scheduleBoard/{docId} {
-        allow read, write: if isMember(pid) || isOwner(pid);
+        allow read, write: if isMember(pid);
       }
 
-      // portalLogs：メンバーが追記できる（必要なら条件をもっと厳密にできる）
+      // --- portalLogs（既存仕様：createdBy は email） ---
       match /portalLogs/{logId} {
-        allow read: if isMember(pid) || isOwner(pid);
-        allow create: if isMember(pid) || isOwner(pid);
-        allow update, delete: if isOwner(pid);
-      }
+        allow read: if isMember(pid);
 
-      // その他の未知サブコレクションも一括でメンバー限定
-      match /{document=**} {
-        allow read, write: if isMember(pid) || isOwner(pid);
+        allow create: if isMember(pid)
+          && hasEmail()
+          && request.resource.data.createdBy == emailLower();
+
+        allow update, delete: if isAdmin()
+          || (isMember(pid) && hasEmail() && resource.data.createdBy == emailLower());
       }
     }
 
-    // collectionGroup クエリ用（index.js の fetchMemberProjectIds と invites検索のため）
-    match /{path=**}/members/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid;
+    // --- collectionGroup queries support ---
+    // members: 自分自身のmemberドキュメントのみ読める（fetchMemberProjectIds向け）
+    match /{path=**}/members/{docId} {
+      allow read: if signedIn() && (
+        (resource.data.uid is string && resource.data.uid == request.auth.uid)
+        || (resource.data.memberUid is string && resource.data.memberUid == request.auth.uid)
+        || (docId == request.auth.uid) // docId=uid のパターンを許可
+      );
     }
 
+    // invites: 自分宛の招待だけ読める（fetchPendingInvites向け）
     match /{path=**}/invites/{inviteId} {
-      allow read: if signedIn() && request.auth.token.email.lower() == resource.data.emailLower;
+      allow read: if signedIn()
+        && hasEmail()
+        && resource.data.emailLower is string
+        && resource.data.emailLower == emailLower();
     }
   }
 }
