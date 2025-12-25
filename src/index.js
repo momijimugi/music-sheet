@@ -10,7 +10,7 @@ import {
   where,
 } from "firebase/firestore";
 import { mountThemeToggle } from "./ui_common";
-import { auth, provider, db } from "./firebase";
+import { auth, provider, db, upsertUserProfile, createProject } from "./firebase";
 
 const base = import.meta.env.BASE_URL || "/";
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
@@ -21,32 +21,39 @@ const DEFAULT_MEMBER_ROLE = "member";
 const userPill = document.getElementById("userPill");
 const btnLogin = document.getElementById("btnLogin");
 const btnLogout = document.getElementById("btnLogout");
+const btnNewProject = document.getElementById("btnNewProject");
 const adminLink = document.getElementById("adminLink");
 const inviteMsg = document.getElementById("inviteMsg");
 const inviteList = document.getElementById("inviteList");
 
 const JP = {
-  metaDescription: "\u97f3\u697d\u5236\u4f5c\u30c1\u30fc\u30e0\u5411\u3051\u306e\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u5171\u6709\u30cf\u30d6",
-  lead: "\u3088\u3046\u3053\u305d\u3002\u97f3\u697d\u5236\u4f5c\u3084\u30b9\u30b1\u30b8\u30e5\u30fc\u30eb\u3092\u5171\u6709\u3057\u3066\u3001\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u3092\u4e00\u7dd2\u306b\u9032\u3081\u308b\u305f\u3081\u306e\u30dd\u30fc\u30bf\u30eb\u3067\u3059\u3002",
-  notLoggedIn: "\u672a\u30ed\u30b0\u30a4\u30f3",
-  login: "Google\u3067\u30ed\u30b0\u30a4\u30f3",
-  logout: "\u30ed\u30b0\u30a2\u30a6\u30c8",
-  admin: "\u7ba1\u7406\u753b\u9762\u3078",
-  inviteTitle: "\u62db\u5f85\u3055\u308c\u3066\u3044\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8",
-  loginHint: "\u30ed\u30b0\u30a4\u30f3\u3059\u308b\u3068\u62db\u5f85\u3055\u308c\u305f\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u8868\u793a\u3055\u308c\u307e\u3059\u3002",
-  emailMissing: "\u30e1\u30fc\u30eb\u30a2\u30c9\u30ec\u30b9\u304c\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f\u3002",
-  loading: "\u8aad\u307f\u8fbc\u307f\u4e2d...",
-  inviteLoadFail: "\u62db\u5f85\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u30ed\u30b0\u30a4\u30f3\u72b6\u614b\u3084\u6a29\u9650\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
-  noInvites: "\u62db\u5f85\u4e2d\u306e\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u306f\u3042\u308a\u307e\u305b\u3093\u3002",
-  inviteLoadFailShort: "\u62db\u5f85\u4e00\u89a7\u306e\u8aad\u307f\u8fbc\u307f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002",
-  noProjects: "\u53c2\u7167\u3067\u304d\u308b\u30d7\u30ed\u30b8\u30a7\u30af\u30c8\u304c\u3042\u308a\u307e\u305b\u3093\u3002",
-  statusJoined: "\u53c2\u52a0\u6e08\u307f",
-  statusInvite: "\u62db\u5f85\u4e2d",
-  noteJoin: "\u53c2\u52a0\u3059\u308b\u3092\u62bc\u3059\u3068\u5165\u5ba4\u3067\u304d\u307e\u3059",
-  join: "\u53c2\u52a0\u3059\u308b",
-  joining: "\u53c2\u52a0\u4e2d...",
-  joinFail: "\u53c2\u52a0\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ",
+  metaDescription: "音楽制作チーム向けのプロジェクト共有ハブ",
+  lead: "ようこそ。音楽制作やスケジュールを共有して、プロジェクトを一緒に進めるためのポータルです。",
+  notLoggedIn: "未ログイン",
+  login: "Googleでログイン",
+  logout: "ログアウト",
+  admin: "管理画面へ",
+  inviteTitle: "参加中のプロジェクト",
+  loginHint: "ログインすると招待されたプロジェクトが表示されます。",
+  emailMissing: "メールアドレスが取得できませんでした。",
+  loading: "読み込み中...",
+  inviteLoadFail: "招待一覧の読み込みに失敗しました。ログイン状態や権限を確認してください。",
+  noInvites: "招待中のプロジェクトはありません。",
+  inviteLoadFailShort: "招待一覧の読み込みに失敗しました。",
+  noProjects: "参照できるプロジェクトがありません。",
+  statusJoined: "参加済み",
+  statusInvite: "招待中",
+  noteJoin: "参加するを押すと入室できます",
+  join: "参加する",
+  joining: "参加中...",
+  joinFail: "参加に失敗しました: ",
+  newProject: "新しいプロジェクト名を入力してください",
+  creatingProject: "プロジェクトを作成中...",
+  projectCreated: "プロジェクトを作成しました",
+  createProjectFail: "プロジェクトの作成に失敗しました: ",
 };
+
+let currentUser = null;
 
 const setMsg = (t) => {
   if (inviteMsg) inviteMsg.textContent = t || "";
@@ -72,12 +79,16 @@ async function fetchMemberProjectIds(uid) {
   if (!uid) return [];
   const q = query(
     collectionGroup(db, "members"),
-    where("memberUid", "==", uid)
+    where("uid", "==", uid)
   );
   const snap = await getDocs(q);
-  return snap.docs
-    .map((docSnap) => docSnap.ref.parent.parent?.id)
-    .filter(Boolean);
+  const ids = [];
+  snap.forEach((d) => {
+    // d.ref: .../projects/{projectId}/members/{uid}
+    const projectId = d.ref.parent.parent.id;
+    ids.push(projectId);
+  });
+  return [...new Set(ids)];
 }
 
 async function fetchPendingInvites(emailLower) {
@@ -117,16 +128,50 @@ btnLogin?.addEventListener("click", async () => {
 btnLogout?.addEventListener("click", async () => {
   await signOut(auth);
 });
+btnNewProject?.addEventListener("click", async () => {
+  if (!currentUser) {
+    setMsg("ログインしてください");
+    return;
+  }
+  const name = prompt(JP.newProject);
+  if (!name || !name.trim()) return;
+
+  btnNewProject.disabled = true;
+  const prevMsg = inviteMsg.textContent;
+  setMsg(JP.creatingProject);
+
+  try {
+    await createProject({ name, user: currentUser });
+    setMsg(JP.projectCreated);
+    await loadInvites(currentUser);
+  } catch (err) {
+    console.error(err);
+    setMsg(JP.createProjectFail + (err.code || err.message));
+  } finally {
+    btnNewProject.disabled = false;
+    // メッセージを少し待ってから元に戻す
+    setTimeout(() => {
+      if(inviteMsg.textContent === JP.creatingProject || inviteMsg.textContent === JP.projectCreated){
+        setMsg(prevMsg);
+      }
+    }, 2000);
+  }
+});
+
 
 onAuthStateChanged(auth, async (user) => {
+  currentUser = user;
+  await upsertUserProfile(user);
   if (userPill) userPill.textContent = user?.email || JP.notLoggedIn;
   if (btnLogin) btnLogin.style.display = user ? "none" : "inline-flex";
   if (btnLogout) btnLogout.style.display = user ? "inline-flex" : "none";
+  if (btnNewProject) btnNewProject.style.display = user ? "inline-flex" : "none";
   if (adminLink) adminLink.style.display = isAdminUser(user) ? "inline-flex" : "none";
 
   if (!user) {
     setMsg(JP.loginHint);
     if (inviteList) inviteList.innerHTML = "";
+    if (btnNewProject) btnNewProject.style.display = "none";
     return;
   }
 
@@ -205,29 +250,32 @@ async function loadInvites(user) {
   }
 
   const memberSet = new Set(memberProjectIds);
-  invites = invites.filter((invite) => !memberSet.has(invite.projectId));
+  const pendingInvites = invites.filter((invite) => !memberSet.has(invite.projectId));
 
-  if (!memberProjectIds.length && !invites.length) {
-    setMsg(
-      denied
-        ? JP.inviteLoadFail
-        : JP.noInvites
-    );
+  const projectIds = [...new Set([...memberProjectIds, ...pendingInvites.map(p => p.projectId)])];
+
+  if (!projectIds.length) {
     if (inviteList) inviteList.innerHTML = "";
+    setMsg(denied ? JP.inviteLoadFail : JP.noProjects);
     return;
   }
 
-  const memberCards = await fetchProjectCards(memberProjectIds, user);
-  const inviteCards = invites.map((invite) => ({
-    id: invite.projectId,
-    name: invite.projectName || invite.projectId,
-    registered: false,
-    type: "invite",
-    inviteId: invite.inviteId,
-  }));
+  const projectCards = await fetchProjectCards(projectIds, user);
+  const projectMap = new Map(projectCards.map(p => [p.id, p]));
+
+  const memberCards = memberProjectIds.map(id => projectMap.get(id)).filter(Boolean);
+  const inviteCards = pendingInvites.map(invite => {
+    const card = projectMap.get(invite.projectId);
+    return {
+      ...invite,
+      name: card?.name || invite.projectName || invite.projectId,
+      registered: !!card,
+    }
+  });
+
   const cards = [
     ...memberCards.map((card) => ({ ...card, type: "member" })),
-    ...inviteCards,
+    ...inviteCards.map((card) => ({ ...card, type: "invite" })),
   ];
   cards.sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)));
 
@@ -244,7 +292,7 @@ async function loadInvites(user) {
   if (inviteList) {
     inviteList.innerHTML = cards
       .map((item) => {
-        const canAccess = isAdminUser(user) || item.type === "member";
+        const canAccess = item.type === "member";
         const statusLabel = canAccess ? JP.statusJoined : JP.statusInvite;
         const statusClass = canAccess ? "ok" : "ng";
         const note = canAccess
@@ -294,7 +342,7 @@ async function loadInvites(user) {
             role: DEFAULT_MEMBER_ROLE,
             emailLower: email,
             joinedAt: serverTimestamp(),
-            memberUid: uid,
+            uid: uid, //
             inviteId,
           });
           batch.update(inviteRef, {

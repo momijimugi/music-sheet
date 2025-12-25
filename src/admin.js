@@ -25,6 +25,7 @@ import {
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
+import { upsertUserProfile } from "./firebase";
 
 const base = import.meta.env.BASE_URL || "/";
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
@@ -1114,6 +1115,7 @@ async function initAdmin() {
 }
 
 onAuthStateChanged(auth, async (user) => {
+  await upsertUserProfile(user);
   currentUser = user;
 
   if (!isAdmin(user)) {

@@ -1,5 +1,5 @@
 ﻿import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { auth, provider } from "./firebase";
+import { auth, provider, upsertUserProfile, isUserBanned } from "./firebase";
 
 const THEME_KEY = "theme";
 
@@ -17,7 +17,18 @@ export function mountTopbar(){
   });
 
   return new Promise((resolve) => {
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
+      await upsertUserProfile(user);
+
+      if (user && await isUserBanned(user.uid)) {
+        showBannedUI();
+        await signOut(auth);
+        // BANユーザーの場合はここで処理を中断
+        // resolve(null) を返して、ログインしていない状態として扱う
+        resolve(null);
+        return;
+      }
+
       if(user){
         userPill.textContent = user.email || user.uid;
         btnLogin.style.display = "none";
@@ -81,4 +92,16 @@ export function mountThemeToggle(buttonId = "btnThemeToggle"){
     render();
     window.dispatchEvent(new CustomEvent("themechange", { detail: mode }));
   });
+}
+
+export function showBannedUI(){
+  const message = "このアカウントは現在ご利用いただけません（利用停止中）。";
+  // 既存メッセージ関数がないのでalertとDOM表示
+  alert(message);
+  const msgEl = document.getElementById("msg");
+  if(msgEl) msgEl.textContent = message;
+
+  // 操作を止めるため、全体を半透明にしてクリック無効化
+  document.body.style.pointerEvents = "none";
+  document.body.style.opacity = "0.6";
 }

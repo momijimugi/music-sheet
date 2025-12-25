@@ -15,7 +15,6 @@ dist-ssr
 .vite
 .env
 Music sheet.txt
-firestore.rules.txt
 
 # Editor directories and files
 .vscode/*

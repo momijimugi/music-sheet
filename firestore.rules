@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // まずプロジェクト内メンバー判定（members/{uid} が存在する）
+    function isMember(pid) {
+      return signedIn()
+        && exists(/databases/$(database)/documents/projects/$(pid)/members/$(request.auth.uid));
+    }
+
+    function isOwner(pid) {
+      return signedIn()
+        && get(/databases/$(database)/documents/projects/$(pid)).data.ownerUid == request.auth.uid;
+    }
+
+    // users: 自分のプロフィールだけ読める/更新できる
+    match /users/{uid} {
+      allow read, create, update: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /projects/{pid} {
+      // project本体
+      allow read: if isMember(pid) || isOwner(pid);
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isOwner(pid);
+
+      // members: 参加者一覧
+      match /members/{uid} {
+        allow read: if isMember(pid) || isOwner(pid);
+
+        // ownerが管理（追加/削除/更新）
+        allow update, delete: if isOwner(pid);
+
+        // 招待から参加（本人が自分のuidで作る）
+        // inviteドキュメントの emailLower と auth.email を突合
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.inviteId is string
+          && get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.usedBy == null
+          && request.auth.token.email.lower() ==
+             get(/databases/$(database)/documents/projects/$(pid)/invites/$(request.resource.data.inviteId)).data.emailLower;
+      }
+
+      // invites: ownerが作る/管理。招待された本人が「受諾更新」だけできる
+      match /invites/{inviteId} {
+        allow read, create, delete: if isOwner(pid);
+
+        // ownerは自由に更新可
+        allow update: if isOwner(pid)
+          || (
+            signedIn()
+            && request.auth.token.email.lower() == resource.data.emailLower
+            && resource.data.usedBy == null
+            && request.resource.data.usedBy == request.auth.uid
+            && request.resource.data.usedAt is timestamp
+            // 変更キーを usedBy, usedAt のみに縛る
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usedBy','usedAt'])
+          );
+      }
+
+      // cues: メンバーは読み書きOK
+      match /cues/{cueId} {
+        allow read, write: if isMember(pid) || isOwner(pid);
+      }
+
+      // settings / portal / scheduleBoard など：全部メンバーOKに統一
+      match /settings/{docId} {
+        allow read, write: if isMember(pid) || isOwner(pid);
+      }
+
+      match /portal/{docId} {
+        allow read, write: if isMember(pid) || isOwner(pid);
+      }
+
+      match /scheduleBoard/{docId} {
+        allow read, write: if isMember(pid) || isOwner(pid);
+      }
+
+      // portalLogs：メンバーが追記できる（必要なら条件をもっと厳密にできる）
+      match /portalLogs/{logId} {
+        allow read: if isMember(pid) || isOwner(pid);
+        allow create: if isMember(pid) || isOwner(pid);
+        allow update, delete: if isOwner(pid);
+      }
+
+      // その他の未知サブコレクションも一括でメンバー限定
+      match /{document=**} {
+        allow read, write: if isMember(pid) || isOwner(pid);
+      }
+    }
+
+    // collectionGroup クエリ用（index.js の fetchMemberProjectIds と invites検索のため）
+    match /{path=**}/members/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /{path=**}/invites/{inviteId} {
+      allow read: if signedIn() && request.auth.token.email.lower() == resource.data.emailLower;
+    }
+  }
+}

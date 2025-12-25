@@ -1614,6 +1614,35 @@ $("btnLogin").onclick = async () => {
 $("btnLogout").onclick = async () => { await signOut(auth); };
 
 onAuthStateChanged(auth, async (user) => {
+  async function upsertUserProfile(user){
+    if(!user?.uid) return;
+
+    const uref = doc(db, "users", user.uid);
+    const snap = await getDoc(uref);
+
+    const email = user.email || "";
+    const emailNorm = email.trim().toLowerCase();
+
+    if(!snap.exists()){
+      await setDoc(uref, {
+        email,
+        emailNorm,
+        displayName: user.displayName || null,
+        status: "active",
+        roleGlobal: "user",
+        createdAt: serverTimestamp(),
+        lastSeenAt: serverTimestamp(),
+      });
+    }else{
+      await updateDoc(uref, {
+        lastSeenAt: serverTimestamp(),
+        email,
+        emailNorm,
+        displayName: user.displayName || null,
+      });
+    }
+  }
+  await upsertUserProfile(user);
   currentUser = user;
   if(user){
     $("userPill").textContent = user.email || user.uid;
