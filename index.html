@@ -3,366 +3,193 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MUSIC SHEET HUB</title>
-  <meta name="description" content="&#x97F3;&#x697D;&#x5236;&#x4F5C;&#x30C1;&#x30FC;&#x30E0;&#x5411;&#x3051;&#x306E;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x5171;&#x6709;&#x30CF;&#x30D6;" />
-  <style>
-    @import url("https://fonts.googleapis.com/css2?family=Marcellus&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap");
-
-    :root {
-      color-scheme: light dark;
-      --ink: #1a1b1e;
-      --muted: #5a6068;
-      --paper: #f6f1e8;
-      --accent: #d9822b;
-      --accent-strong: #b6671d;
-      --teal: #1f4e4a;
-      --card: rgba(255, 255, 255, 0.82);
-      --stroke: rgba(26, 27, 30, 0.12);
-      --shadow: 0 20px 40px rgba(26, 27, 30, 0.12);
-    }
-
-    :root[data-theme="dark"] {
-      --ink: #f1f3f6;
-      --muted: #b5bac4;
-      --paper: #0f131a;
-      --accent: #e08f3e;
-      --accent-strong: #c8742c;
-      --teal: #6ad2c7;
-      --card: rgba(18, 24, 34, 0.9);
-      --stroke: rgba(255, 255, 255, 0.12);
-      --shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
-    }
-
-    :root[data-theme="dark"] body {
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(43, 107, 103, 0.25), transparent 60%),
-        radial-gradient(900px 500px at -10% 20%, rgba(224, 143, 62, 0.18), transparent 50%),
-        linear-gradient(160deg, #0d1118 0%, #121822 60%, #0e141c 100%);
-    }
-
-    :root[data-theme="dark"] .hero,
-    :root[data-theme="dark"] .inviteCard,
-    :root[data-theme="dark"] .inviteItem {
-      background: rgba(14, 19, 28, 0.92);
-      border-color: rgba(255, 255, 255, 0.12);
-    }
-
-    :root[data-theme="dark"] .pill,
-    :root[data-theme="dark"] .btn.ghost,
-    :root[data-theme="dark"] .inviteStatus {
-      background: rgba(16, 22, 32, 0.9);
-      border-color: rgba(255, 255, 255, 0.12);
-      color: var(--ink);
-    }
-
-    :root[data-theme="dark"] .btn.ghost {
-      box-shadow: none;
-    }
-
-    :root[data-theme="dark"] .inviteStatus.ok {
-      color: #88e1d8;
-      border-color: rgba(106, 210, 199, 0.5);
-    }
-
-    :root[data-theme="dark"] .inviteStatus.ng {
-      color: #f2a25a;
-      border-color: rgba(224, 143, 62, 0.45);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme]) {
-        --ink: #f1f3f6;
-        --muted: #b5bac4;
-        --paper: #0f131a;
-        --accent: #e08f3e;
-        --accent-strong: #c8742c;
-        --teal: #6ad2c7;
-        --card: rgba(18, 24, 34, 0.9);
-        --stroke: rgba(255, 255, 255, 0.12);
-        --shadow: 0 22px 44px rgba(0, 0, 0, 0.45);
-      }
-
-      :root:not([data-theme]) body {
-        background:
-          radial-gradient(1200px 600px at 80% -10%, rgba(43, 107, 103, 0.25), transparent 60%),
-          radial-gradient(900px 500px at -10% 20%, rgba(224, 143, 62, 0.18), transparent 50%),
-          linear-gradient(160deg, #0d1118 0%, #121822 60%, #0e141c 100%);
-      }
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
-      color: var(--ink);
-      background:
-        radial-gradient(1200px 600px at 80% -10%, rgba(31, 78, 74, 0.18), transparent 60%),
-        radial-gradient(900px 500px at -10% 20%, rgba(217, 130, 43, 0.18), transparent 50%),
-        linear-gradient(160deg, #f8f2e6 0%, #f1efe9 50%, #f7f1e8 100%);
-      min-height: 100vh;
-    }
-
-    .page {
-      max-width: 980px;
-      margin: 0 auto;
-      padding: 72px 28px 80px;
-      position: relative;
-    }
-
-    .hero {
-      display: grid;
-      gap: 18px;
-      padding: 36px 36px 28px;
-      border-radius: 28px;
-      background: var(--card);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      animation: fadeUp 700ms ease both;
-    }
-
-    .eyebrow {
-      letter-spacing: 0.32em;
-      text-transform: uppercase;
-      font-size: 12px;
-      color: var(--muted);
-      margin: 0;
-    }
-
-    h1 {
-      font-family: "Marcellus", "Times New Roman", serif;
-      font-size: clamp(34px, 5vw, 54px);
-      margin: 0;
-      color: var(--teal);
-    }
-
-    .lead {
-      margin: 0;
-      font-size: 15px;
-      line-height: 1.7;
-      color: var(--muted);
-    }
-
-    .userBar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px dashed rgba(26, 27, 30, 0.18);
-      background: rgba(255, 255, 255, 0.45);
-      font-size: 12px;
-    }
-
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 12px 18px;
-      border-radius: 999px;
-      text-decoration: none;
-      font-weight: 600;
-      border: 1px solid transparent;
-      transition: transform 180ms ease, box-shadow 180ms ease;
-      cursor: pointer;
-      background: transparent;
-      color: inherit;
-      white-space: nowrap;
-    }
-
-    .btn.primary {
-      background: var(--accent);
-      color: #fff;
-      box-shadow: 0 12px 18px rgba(217, 130, 43, 0.26);
-    }
-
-    .btn.ghost {
-      color: var(--ink);
-      border-color: var(--stroke);
-      background: rgba(255, 255, 255, 0.7);
-    }
-
-    .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 14px 24px rgba(26, 27, 30, 0.16);
-    }
-
-    .inviteCard {
-      margin-top: 26px;
-      display: grid;
-      gap: 16px;
-      padding: 22px;
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.72);
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      box-shadow: 0 14px 28px rgba(26, 27, 30, 0.1);
-    }
-
-    .inviteHead {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .inviteList {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-
-    .inviteItem {
-      display: grid;
-      gap: 10px;
-      padding: 16px;
-      border-radius: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      background: rgba(255, 255, 255, 0.6);
-    }
-
-    .inviteTitle {
-      font-weight: 700;
-      letter-spacing: 0.02em;
-    }
-
-    .inviteActions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .inviteMeta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .inviteNote {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .inviteStatus {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--stroke);
-      background: rgba(255, 255, 255, 0.7);
-      color: var(--ink);
-    }
-
-    .inviteStatus.ok {
-      border-color: rgba(31, 78, 74, 0.4);
-      color: var(--teal);
-    }
-
-    .inviteStatus.ng {
-      border-color: rgba(217, 130, 43, 0.45);
-      color: var(--accent);
-    }
-
-    .btn.small {
-      padding: 8px 12px;
-      font-size: 12px;
-    }
-
-    .btn.disabled {
-      opacity: 0.55;
-      pointer-events: none;
-    }
-
-    .inviteHint {
-      font-size: 12px;
-      color: var(--muted);
-    }
-
-    .muted {
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    @keyframes fadeUp {
-      from {
-        opacity: 0;
-        transform: translateY(14px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    @media (max-width: 720px) {
-      .page {
-        padding: 56px 18px 64px;
-      }
-
-      .hero {
-        padding: 28px 24px;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      * {
-        animation: none !important;
-        transition: none !important;
-      }
-    }
-  </style>
-  <script type="module" crossorigin src="/music-sheet/assets/index-B8ZCsgfm.js"></script>
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-B0-OTnKT.js">
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-B6LBwd9E.js">
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/ui_common-Bmq5Fv_e.js">
+  <title>Music Sheet Hub</title>
+  <meta name="description" content="&#x97F3;&#x697D;&#x5236;&#x4F5C;&#x30C1;&#x30FC;&#x30E0;&#x5411;&#x3051;&#x306E;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x5171;&#x6709;&#x30CF;&#x30D6;&#x3002;&#x57FA;&#x672C;&#x6A5F;&#x80FD;&#x3068;&#x6709;&#x6599;&#x30D7;&#x30E9;&#x30F3;&#x3092;&#x3054;&#x7D39;&#x4ECB;&#x3057;&#x307E;&#x3059;&#x3002;" />
+  <style>[x-cloak]{display:none}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Sora", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "sans-serif"],
+          },
+          colors: {
+            brand: {
+              50: "#f0f9ff",
+              100: "#e0f2fe",
+              200: "#bae6fd",
+              300: "#7dd3fc",
+              400: "#38bdf8",
+              500: "#0ea5e9",
+              600: "#0284c7",
+              700: "#0369a1",
+              800: "#075985",
+              900: "#0c4a6e",
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <script type="module" crossorigin src="/music-sheet/assets/index-DMNBuaxr.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-BYm7NlOb.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-DUzmoriO.js">
 </head>
-<body>
-  <main class="page">
-    <section class="hero">
-      <p class="eyebrow">Welcome</p>
-      <h1>MUSIC SHEET HUB</h1>
-      <p class="lead">&#x3088;&#x3046;&#x3053;&#x305D;&#x3002;&#x97F3;&#x697D;&#x5236;&#x4F5C;&#x3084;&#x30B9;&#x30B1;&#x30B8;&#x30E5;&#x30FC;&#x30EB;&#x3092;&#x5171;&#x6709;&#x3057;&#x3066;&#x3001;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x3092;&#x4E00;&#x7DD2;&#x306B;&#x9032;&#x3081;&#x308B;&#x305F;&#x3081;&#x306E;&#x30DD;&#x30FC;&#x30BF;&#x30EB;&#x3067;&#x3059;&#x3002;</p>
-      <div class="userBar">
-        <span id="userPill" class="pill">&#x672A;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</span>
-        <button id="btnLogin" class="btn ghost" type="button">Google&#x3067;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</button>
-        <button id="btnLogout" class="btn ghost" type="button" style="display:none;">&#x30ED;&#x30B0;&#x30A2;&#x30A6;&#x30C8;</button>
-        <button id="btnThemeToggle" class="btn ghost" type="button" aria-label="テーマ切り替え"></button>
-      </div>
-      <div class="actions">
-        <a id="adminLink" class="btn primary" href="./admin.html" style="display:none;">&#x7BA1;&#x7406;&#x753B;&#x9762;&#x3078;</a>
-      </div>
-    </section>
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+  <div class="relative overflow-hidden">
+    <div class="absolute inset-0 -z-10 bg-gradient-to-br from-brand-50 via-slate-50 to-white"></div>
+    <div class="absolute -top-24 left-1/2 h-64 w-[620px] -translate-x-1/2 rounded-full bg-brand-100/70 blur-3xl"></div>
 
-    <section class="inviteCard" aria-labelledby="inviteTitle">
-      <div class="inviteHead">
-        <h2 id="inviteTitle">&#x62DB;&#x5F85;&#x3055;&#x308C;&#x3066;&#x3044;&#x308B;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;</h2>
-        <button id="btnNewProject" class="btn primary small" type="button" style="display:none;">＋新規プロジェクト</button>
-        <span id="inviteMsg" class="muted"></span>
+    <header class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
+      <div class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-lg">
+          <span class="text-lg font-semibold">MS</span>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-[0.32em] text-slate-400">Music Sheet Hub</div>
+          <div class="text-lg font-semibold">Pines-style Workspace</div>
+        </div>
       </div>
-      <div id="inviteList" class="inviteList"></div>
-    </section>
-  </main>
+      <div class="flex items-center gap-3">
+        <span id="authEmail" class="hidden items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm"></span>
+        <a id="projectLink" href="./account.html" class="hidden items-center gap-2 rounded-full bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800">&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x3078;</a>
+        <a id="loginLink" href="./signup.html" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300">&#x30ED;&#x30B0;&#x30A4;&#x30F3;</a>
+      </div>
+    </header>
+
+    <main class="mx-auto w-full max-w-6xl px-6 pb-20 pt-6">
+      <section class="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+        <div class="rounded-3xl border border-white/70 bg-white/80 p-8 shadow-xl shadow-slate-200/60 backdrop-blur">
+          <div class="inline-flex items-center gap-2 rounded-full border border-brand-200/70 bg-brand-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+            Music Production
+            <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
+          </div>
+          <h1 class="mt-6 text-3xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-4xl">
+            &#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x904B;&#x55B6;&#x3068;&#x5236;&#x4F5C;&#x30B3;&#x30E9;&#x30DC;&#x3092;&#x30B9;&#x30E0;&#x30FC;&#x30BA;&#x306B;
+          </h1>
+          <p class="mt-4 text-base leading-relaxed text-slate-500">
+            &#x97F3;&#x697D;&#x5236;&#x4F5C;&#x306B;&#x5FC5;&#x8981;&#x306A;&#x7BA1;&#x7406;&#x30FB;&#x30B3;&#x30E9;&#x30DC;&#x6A5F;&#x80FD;&#x3092;&#x4E00;&#x3064;&#x306E;&#x30CF;&#x30D6;&#x306B;&#x307E;&#x3068;&#x3081;&#x307E;&#x3057;&#x305F;&#x3002;&#x62DB;&#x5F85;&#x3001;&#x9032;&#x884C;&#x30ED;&#x30B0;&#x3001;&#x30B9;&#x30B1;&#x30B8;&#x30E5;&#x30FC;&#x30EB;&#x3092;&#x4E00;&#x89A7;&#x3067;&#x7BA1;&#x7406;&#x3067;&#x304D;&#x307E;&#x3059;&#x3002;
+          </p>
+          <div class="mt-6 flex flex-wrap items-center gap-3">
+            <a href="./signup.html" class="inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800">&#x7121;&#x6599;&#x3067;&#x59CB;&#x3081;&#x308B;</a>
+            <a href="./pricing.html" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300">&#x6599;&#x91D1;&#x3092;&#x898B;&#x308B;</a>
+          </div>
+          <div class="mt-6 flex flex-wrap gap-3 text-xs text-slate-400">
+            <span class="rounded-full border border-slate-200 bg-white px-3 py-1">&#x7121;&#x6599;&#x30D7;&#x30E9;&#x30F3;: 2&#x4EF6;&#x307E;&#x3067;</span>
+            <span class="rounded-full border border-slate-200 bg-white px-3 py-1">&#x6709;&#x6599;&#x30D7;&#x30E9;&#x30F3;: &#x7121;&#x5236;&#x9650;</span>
+          </div>
+        </div>
+
+        <div class="grid gap-6">
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60">
+            <div class="flex items-start justify-between">
+              <div>
+                <div class="text-xs uppercase tracking-[0.2em] text-slate-400">Now</div>
+                <h2 class="mt-2 text-xl font-semibold">&#x9032;&#x884C;&#x30C8;&#x30E9;&#x30C3;&#x30AF;&#x3092;&#x898B;&#x3048;&#x308B;&#x5316;</h2>
+              </div>
+              <span class="rounded-full bg-brand-100 px-3 py-1 text-xs font-semibold text-brand-700">Live</span>
+            </div>
+            <p class="mt-3 text-sm text-slate-500">&#x30B9;&#x30B1;&#x30B8;&#x30E5;&#x30FC;&#x30EB;&#x3068;&#x30ED;&#x30B0;&#x3092;&#x4E00;&#x76EE;&#x3067;&#x78BA;&#x8A8D;&#x3002;&#x51FA;&#x6F14;&#x8005;&#x3084;&#x62C5;&#x5F53;&#x8005;&#x306E;&#x60C5;&#x5831;&#x3082;&#x7BA1;&#x7406;&#x3057;&#x3084;&#x3059;&#x304F;&#x306A;&#x308A;&#x307E;&#x3059;&#x3002;</p>
+            <div class="mt-6 grid gap-3">
+              <div class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
+                <span class="text-slate-500">&#x9032;&#x884C;&#x4E2D;&#x306E;&#x66F2;&#x76EE;</span>
+                <span class="font-semibold text-slate-900">14</span>
+              </div>
+              <div class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm">
+                <span class="text-slate-500">&#x6700;&#x65B0;&#x30B3;&#x30E1;&#x30F3;&#x30C8;</span>
+                <span class="font-semibold text-slate-900">24h</span>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-3xl border border-brand-200 bg-brand-50 p-6">
+            <h3 class="text-sm font-semibold text-brand-700">&#x62DB;&#x5F85;&#x306F;&#x30EA;&#x30F3;&#x30AF;&#x3067;&#x7C21;&#x5358;</h3>
+            <p class="mt-2 text-sm text-brand-800">&#x62DB;&#x5F85;&#x30EA;&#x30F3;&#x30AF;&#x3092;&#x30B3;&#x30D4;&#x30FC;&#x3059;&#x308B;&#x3060;&#x3051;&#x3067;&#x3001;&#x65B0;&#x3057;&#x3044;&#x30E1;&#x30F3;&#x30D0;&#x30FC;&#x304C;&#x3059;&#x3050;&#x306B;&#x53C2;&#x52A0;&#x3067;&#x304D;&#x307E;&#x3059;&#x3002;</p>
+            <a href="./signup.html" class="mt-4 inline-flex items-center gap-2 rounded-full bg-brand-700 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-brand-800">&#x62DB;&#x5F85;&#x3092;&#x958B;&#x59CB;</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="features" class="mt-16">
+        <div class="flex items-center justify-between">
+          <h2 class="text-2xl font-semibold">&#x30B3;&#x30A2;&#x6A5F;&#x80FD;</h2>
+          <span class="text-xs uppercase tracking-[0.2em] text-slate-400">Features</span>
+        </div>
+        <div class="mt-6 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/50">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-100 text-brand-700">01</div>
+            <h3 class="mt-4 text-lg font-semibold">&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x7BA1;&#x7406;</h3>
+            <p class="mt-2 text-sm text-slate-500">&#x9032;&#x884C;&#x72B6;&#x614B;&#x3001;&#x30BF;&#x30B9;&#x30AF;&#x3001;&#x62C5;&#x5F53;&#x8005;&#x3092;&#x4E00;&#x5143;&#x5316;&#x3002;</p>
+          </div>
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/50">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-100 text-brand-700">02</div>
+            <h3 class="mt-4 text-lg font-semibold">&#x53C2;&#x8003;&#x30EA;&#x30F3;&#x30AF;</h3>
+            <p class="mt-2 text-sm text-slate-500">&#x66F2;&#x8ABF;&#x3084;&#x96F0;&#x56F2;&#x6C17;&#x306E;&#x53C2;&#x8003;&#x3092;&#x5408;&#x308F;&#x305B;&#x3066;&#x7BA1;&#x7406;&#x3002;</p>
+          </div>
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/50">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-100 text-brand-700">03</div>
+            <h3 class="mt-4 text-lg font-semibold">&#x30ED;&#x30B0;&#x5171;&#x6709;</h3>
+            <p class="mt-2 text-sm text-slate-500">&#x6253;&#x3061;&#x5408;&#x308F;&#x305B;&#x30E1;&#x30E2;&#x3084;FB&#x3092;&#x30ED;&#x30B0;&#x3067;&#x6B8B;&#x3057;&#x307E;&#x3059;&#x3002;</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="plans" class="mt-16">
+        <div class="flex items-center justify-between">
+          <h2 class="text-2xl font-semibold">&#x30D7;&#x30E9;&#x30F3;</h2>
+          <span class="text-xs uppercase tracking-[0.2em] text-slate-400">Plans</span>
+        </div>
+        <div class="mt-6 grid gap-6 lg:grid-cols-2">
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/50">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">Free</h3>
+              <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold">&#x7121;&#x6599;</span>
+            </div>
+            <div class="mt-3 text-3xl font-semibold">&#x00A5;0</div>
+            <ul class="mt-4 space-y-2 text-sm text-slate-500">
+              <li>&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;2&#x4EF6;&#x307E;&#x3067;</li>
+              <li>&#x62DB;&#x5F85;&#x30FB;&#x30B9;&#x30B1;&#x30B8;&#x30E5;&#x30FC;&#x30EB;&#x7BA1;&#x7406;</li>
+              <li>&#x30B3;&#x30E9;&#x30DC;&#x57FA;&#x672C;&#x6A5F;&#x80FD;</li>
+            </ul>
+            <a href="./signup.html" class="mt-6 inline-flex w-full items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300">&#x7121;&#x6599;&#x3067;&#x59CB;&#x3081;&#x308B;</a>
+          </div>
+          <div class="rounded-3xl border border-brand-200 bg-white p-6 shadow-xl shadow-brand-200/40">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold">Pro</h3>
+              <span class="rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700">&#x304A;&#x3059;&#x3059;&#x3081;</span>
+            </div>
+            <div class="mt-3 text-3xl font-semibold">&#x00A5;1,500<span class="text-sm text-slate-400">/&#x6708;</span></div>
+            <ul class="mt-4 space-y-2 text-sm text-slate-500">
+              <li>&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x7121;&#x5236;&#x9650;</li>
+              <li>&#x512A;&#x5148;&#x30B5;&#x30DD;&#x30FC;&#x30C8;</li>
+              <li>&#x30C1;&#x30FC;&#x30E0;&#x5168;&#x4F53;&#x306E;&#x30C0;&#x30C3;&#x30B7;&#x30E5;&#x30DC;&#x30FC;&#x30C9;</li>
+            </ul>
+            <a href="./pricing.html" class="mt-6 inline-flex w-full items-center justify-center rounded-full bg-brand-700 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800">&#x8A73;&#x7D30;&#x3092;&#x898B;&#x308B;</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-16 rounded-3xl border border-slate-200 bg-white p-8 shadow-md shadow-slate-200/50">
+        <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 class="text-2xl font-semibold">&#x30C1;&#x30FC;&#x30E0;&#x306E;&#x6D41;&#x308C;&#x3092;&#x4ECA;&#x3059;&#x3050;&#x6574;&#x3048;&#x308B;</h2>
+            <p class="mt-2 text-sm text-slate-500">&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x4F5C;&#x6210;&#x5F8C;&#x306B;&#x62DB;&#x5F85;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x304C;&#x8868;&#x793A;&#x3055;&#x308C;&#x307E;&#x3059;&#x3002;</p>
+          </div>
+          <a href="./signup.html" class="inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800">&#x4ECA;&#x3059;&#x3050;&#x958B;&#x59CB;</a>
+        </div>
+      </section>
+
+      <footer class="mt-14 text-center text-xs text-slate-400">
+        &#x00A9; <span id="year"></span> Music Sheet Hub
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    document.getElementById("year").textContent = String(new Date().getFullYear());
+  </script>
 </body>
 </html>

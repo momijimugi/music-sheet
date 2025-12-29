@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -7,19 +7,20 @@
   <link rel="icon" type="image/png" sizes="256x256" href="favicon.png">
   <link rel="apple-touch-icon" href="favicon.png">
   <style>
+    @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Sora:wght@400;500;600;700&display=swap");
     :root {
-      --bg-main: #020713;
-      --bg-panel: rgba(18,28,48,0.8);
-      --bg-panel-soft: rgba(18,28,48,0.6);
-      --bg-accent: linear-gradient(150deg, rgba(26,44,78,0.85), rgba(12,18,32,0.9));
-      --gold: #6fd6ff;          /* プライマリを落ち着いたシアンに */
-      --gold-soft: #b8ecff;
-      --text-main: #e9f6ff;
-      --text-muted: #c6dcff;
-      --border-soft: rgba(255,255,255,0.12);
-      --danger: #ff8e9c;
-      --today: rgba(111,214,255,0.32);
-      --shadow-soft: 0 26px 60px rgba(4,10,24,0.68);
+      --bg-main: #0b111a;
+      --bg-panel: rgba(17,24,39,0.92);
+      --bg-panel-soft: rgba(17,24,39,0.7);
+      --bg-accent: linear-gradient(150deg, rgba(17,24,39,0.94), rgba(2,6,23,0.92));
+      --gold: #34d399;
+      --gold-soft: #8af0d1;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border-soft: rgba(148,163,184,0.2);
+      --danger: #f97393;
+      --today: rgba(52,211,153,0.22);
+      --shadow-soft: 0 26px 60px rgba(2,6,23,0.62);
       --radius-xl: 18px;
       --radius-lg: 12px;
       --radius-md: 8px;
@@ -35,33 +36,29 @@
       --cell-bg: rgba(10,14,24,0.48);
       --sidebar-width: 280px;
     }
-
     body.theme-dark {
       color-scheme: dark;
     }
-
     body.theme-light {
-      --bg-main: #edf6ff;
+      --bg-main: #f7f7f2;
       --bg-panel: #ffffff;
-      --bg-panel-soft: #f1f6ff;
-      --bg-accent: radial-gradient(circle at top left, #ffffff 0%, #e6f2ff 55%, #d9e9fb 100%);
-      --text-main: #0c1c36;
-      --text-muted: #2c4164;
-      --border-soft: rgba(8,12,22,0.08);
-      --danger: #d64562;
-      --today: rgba(111,214,255,0.26);
-      --shadow-soft: 0 16px 42px rgba(8,24,50,0.2);
-      --cell-bg: rgba(255,255,255,0.92);
+      --bg-panel-soft: #f1f5f3;
+      --bg-accent: radial-gradient(circle at top left, #ffffff 0%, #eef5f3 55%, #e7f1ef 100%);
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --border-soft: rgba(15,23,42,0.08);
+      --danger: #d94866;
+      --today: rgba(15,118,110,0.18);
+      --shadow-soft: 0 16px 36px rgba(15,23,42,0.18);
+      --cell-bg: rgba(255,255,255,0.9);
       color-scheme: light;
     }
-
     * { box-sizing: border-box; }
-
     html, body {
       margin: 0;
       padding: 0;
       height: 100%;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Sora","Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
       color: var(--text-main);
       background:
         radial-gradient(circle at 16% 18%, rgba(120,200,255,0.18), transparent 42%),
@@ -69,14 +66,12 @@
         radial-gradient(circle at 84% 34%, rgba(120,230,200,0.12), transparent 48%),
         linear-gradient(185deg, #030712 0%, #050918 40%, #030610 100%);
     }
-
     body {
       display: flex;
       justify-content: center;
       align-items: stretch;
       padding: 22px;
     }
-
     .app-shell {
       display: flex;
       flex-direction: row;
@@ -91,7 +86,6 @@
       position: relative;
       backdrop-filter: blur(24px);
     }
-
     .app-shell::before {
       content: "";
       position: absolute;
@@ -105,7 +99,6 @@
       pointer-events: none;
       filter: blur(10px);
     }
-
     .sidebar {
       position: relative;
       width: var(--sidebar-width);
@@ -118,7 +111,6 @@
       z-index: 1;
       backdrop-filter: blur(26px);
     }
-
     .main {
       flex: 1;
       padding: 16px 18px 18px 16px;
@@ -132,21 +124,18 @@
       backdrop-filter: blur(22px);
       border-left: 1px solid rgba(255,255,255,0.12);
     }
-
     .app-title {
       display: flex;
       align-items: flex-start;
       justify-content: flex-start;
       gap: 12px;
     }
-
     .app-title-text {
       display: flex;
       flex-direction: column;
       gap: 4px;
       max-width: 220px;
     }
-
     .app-title-main {
       font-size: 1rem;
       font-weight: 600;
@@ -156,7 +145,6 @@
       gap: 8px;
       white-space: nowrap;
     }
-
     .app-title-main span.logo-dot {
       width: 12px;
       height: 12px;
@@ -165,7 +153,6 @@
       box-shadow: 0 0 16px rgba(98,195,255,0.85);
       flex-shrink: 0;
     }
-
     .app-title-sub {
       font-size: 0.72rem;
       color: var(--text-muted);
@@ -173,7 +160,6 @@
       line-height: 1.4;
       white-space: normal;
     }
-
     .pill {
       font-size: 0.72rem;
       padding: 4px 9px;
@@ -188,12 +174,10 @@
       margin-top: 4px;
       align-self: flex-start;
     }
-
     .pill small {
       color: var(--text-muted);
       font-size: 0.68rem;
     }
-
     .section-label {
       font-size: 0.78rem;
       text-transform: uppercase;
@@ -201,13 +185,11 @@
       color: var(--text-muted);
       margin-bottom: 6px;
     }
-
     .sidebar-controls {
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
-
     .btn {
       border-radius: 999px;
       padding: 7px 10px;
@@ -222,54 +204,44 @@
       transition: background var(--transition-fast), transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
       white-space: nowrap;
     }
-
     .btn span.icon {
       font-size: 0.9rem;
     }
-
     .btn-primary {
       background: linear-gradient(135deg, rgba(98,195,255,0.92), rgba(60,150,240,0.95));
       color: #04101f;
       border-color: rgba(8,12,22,0.35);
       font-weight: 600;
     }
-
     .btn-primary:hover {
       transform: translateY(-1px);
       box-shadow: 0 10px 24px rgba(12,18,30,0.48);
     }
-
     .btn-soft {
       background: rgba(255,255,255,0.03);
     }
-
     .btn-soft:hover {
       background: rgba(255,255,255,0.06);
       transform: translateY(-1px);
     }
-
     .btn-sm {
       padding: 5px 9px;
       font-size: 0.75rem;
     }
-
     .btn-ghost {
       background: transparent;
       border-color: rgba(255,255,255,0.04);
       color: var(--text-muted);
     }
-
     .btn-ghost.active {
       border-color: rgba(111,214,255,0.8);
       color: var(--gold-soft);
       background: rgba(111,214,255,0.1);
     }
-
     .btn-icon-only {
       padding-inline: 6px;
       min-width: 0;
     }
-
     .project-list {
       background: var(--bg-panel-soft);
       border-radius: var(--radius-lg);
@@ -278,7 +250,6 @@
       max-height: 100%;
       overflow-y: auto;
     }
-
     .project-item {
       display: flex;
       align-items: center;
@@ -292,23 +263,19 @@
       border: 1px solid transparent;
       font-size: 0.8rem;
     }
-
     .project-item:hover {
       background: rgba(255,255,255,0.04);
       transform: translateY(-1px);
     }
-
     .project-item.active {
       background: rgba(111,214,255,0.12);
       border-color: rgba(111,214,255,0.8);
     }
-
     .project-name {
       display: flex;
       align-items: center;
       gap: 6px;
     }
-
     .project-dot {
       width: 8px;
       height: 8px;
@@ -316,12 +283,10 @@
       background: var(--gold-soft);
       opacity: 0.9;
     }
-
     .project-meta {
       font-size: 0.7rem;
       color: var(--text-muted);
     }
-
     .top-bar {
       display: flex;
       align-items: center;
@@ -340,14 +305,12 @@
       box-shadow: 0 18px 48px rgba(8,12,22,0.32), inset 0 1px 0 rgba(255,255,255,0.06);
       color: var(--text-main);
     }
-
     .top-left-group {
       display: flex;
       align-items: center;
       gap: 12px;
       flex-wrap: wrap;
     }
-
     .date-controls {
       display: flex;
       align-items: center;
@@ -355,7 +318,6 @@
       font-size: 0.85rem;
       flex-wrap: wrap;
     }
-
     .date-label {
       padding: 4px 10px;
       border-radius: 999px;
@@ -364,7 +326,6 @@
       color: var(--text-main);
       white-space: nowrap;
     }
-
     .range-settings {
       display: flex;
       align-items: center;
@@ -372,7 +333,6 @@
       font-size: 0.75rem;
       color: var(--text-main);
     }
-
     .range-settings input {
       width: 60px;
       padding: 3px 6px;
@@ -383,12 +343,10 @@
       font-size: 0.75rem;
       outline: none;
     }
-
     .range-settings input:focus {
       border-color: rgba(98,195,255,0.7);
       box-shadow: 0 0 0 1px rgba(98,195,255,0.35);
     }
-
     .backup-info {
       display: flex;
       align-items: center;
@@ -398,7 +356,6 @@
       flex-wrap: wrap;
       justify-content: flex-end;
     }
-
     .settings-menu {
       position: relative;
       display: inline-flex;
@@ -406,7 +363,6 @@
       justify-content: flex-end;
       z-index: 9000; /* ensure popover sits above grid/header */
     }
-
     .settings-popover {
       position: absolute;
       right: 0;
@@ -426,39 +382,33 @@
       transform: translateY(0);
       z-index: 12000;
     }
-
     body.theme-light .settings-popover {
       background: rgba(255,255,255,0.94);
       border: 1px solid rgba(8,12,22,0.12);
       box-shadow: 0 16px 40px rgba(8,12,22,0.16);
     }
-
     body.theme-light .settings-popover .btn,
     body.theme-light .import-label {
       background: rgba(8,12,22,0.05);
       border-color: rgba(8,12,22,0.08);
       color: var(--text-main);
     }
-
     .settings-popover.settings-closed {
       opacity: 0;
       pointer-events: none;
       transform: translateY(-8px);
     }
-
     .settings-popover .btn {
       width: 100%;
       justify-content: flex-start;
       border-radius: 12px;
       background: rgba(255,255,255,0.04);
     }
-
     .settings-divider {
       height: 1px;
       width: 100%;
       background: rgba(255,255,255,0.08);
     }
-
     .backup-status {
       display: inline-flex;
       align-items: center;
@@ -468,29 +418,24 @@
       background: rgba(255,255,255,0.02);
       border: 1px solid rgba(255,255,255,0.08);
     }
-
     .backup-status span.value {
       font-weight: 500;
       color: var(--text-main);
     }
-
     .backup-status.overdue span.value {
       color: var(--danger);
     }
-
     .import-label {
       position: relative;
       overflow: hidden;
       cursor: pointer;
     }
-
     .import-label input[type="file"] {
       position: absolute;
       inset: 0;
       opacity: 0;
       cursor: pointer;
     }
-
     .grid-shell {
       flex: 1;
       background: rgba(10,11,18,0.9);
@@ -502,7 +447,6 @@
       gap: 8px;
       min-height: 0;
     }
-
     .grid-header-row {
       display: flex;
       align-items: center;
@@ -518,7 +462,6 @@
       backdrop-filter: blur(18px);
       text-shadow: 0 1px 3px rgba(0,0,0,0.55);
     }
-
     .grid-header-right {
       display: flex;
       align-items: center;
@@ -532,12 +475,10 @@
       backdrop-filter: blur(12px);
       color: #f8fbff;
     }
-
     .grid-header-row span.highlight {
       color: currentColor;
       font-weight: 600;
     }
-
     .client-view-banner {
       display: none;
       align-items: center;
@@ -550,7 +491,6 @@
       border: 1px solid rgba(255,255,255,0.08);
       margin-bottom: 4px;
     }
-
     /* クライアントビュー時だけ表示 */
     body.client-view-mode #clientViewBanner {
       display: flex;
@@ -558,14 +498,12 @@
     body.client-view-mode #clientViewBanner.hidden {
       display: none;
     }
-
     .status-filter {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       font-size: 0.75rem;
     }
-
     .status-filter select {
       padding: 3px 8px;
       border-radius: 999px;
@@ -575,19 +513,16 @@
       font-size: 0.75rem;
       outline: none;
     }
-
     .status-filter select:focus {
       border-color: rgba(98,195,255,0.8);
       box-shadow: 0 0 0 1px rgba(98,195,255,0.5);
     }
-
     /* Light theme overrides: フィルターを明るめの背景＋濃い文字に戻す */
     body.theme-light .status-filter select {
       background: rgba(255,255,255,0.12);
       border: 1px solid rgba(8,12,22,0.12);
       color: #0a162c;
     }
-
     .grid-wrapper {
       position: relative;
       flex: 1;
@@ -601,29 +536,24 @@
       backdrop-filter: blur(22px);
       box-shadow: inset 0 12px 30px rgba(255,255,255,0.04), 0 20px 45px rgba(8,12,22,0.35);
     }
-
     /* 行ヘッダー分離用の2カラムレイアウト */
     .grid-split {
       display: grid;
       grid-template-columns: var(--row-header-width) 1fr;
       height: 100%;
     }
-
     .grid-left,
     .grid-right {
       height: 100%;
       overflow-y: auto;
     }
-
     .grid-right {
       overflow-x: auto;
     }
-
     .row-header-table {
       width: 100%;
       table-layout: fixed;
     }
-
     .row-header-table th.row-header {
       width: var(--row-header-width);
       min-width: var(--row-header-width);
@@ -635,21 +565,18 @@
       background: rgba(10,11,18,0.98);
       border-bottom: 1px solid rgba(255,255,255,0.08);
     }
-
     /* ブラウザの青いテキスト選択を殺す */
     .grid-wrapper,
     .grid-wrapper * {
       user-select: none;
       -webkit-user-select: none;
     }
-
     table.schedule-grid {
       border-collapse: separate;
       border-spacing: 0;
       width: max(100%, max-content);
       font-size: var(--cell-font-size);
     }
-
     table.schedule-grid thead {
       position: sticky;
       top: 0;
@@ -657,12 +584,10 @@
       background: linear-gradient(to bottom, rgba(8,9,14,0.98), rgba(8,9,14,0.96));
       box-shadow: 0 4px 10px rgba(12,18,30,0.6);
     }
-
     table.schedule-grid th,
     table.schedule-grid td {
       border-bottom: 1px solid rgba(255,255,255,0.04);
     }
-
     table.schedule-grid th {
       padding: 6px 6px;
       text-align: left;
@@ -672,7 +597,6 @@
       position: relative;
       background-clip: padding-box;
     }
-
     table.schedule-grid th.row-header {
       min-width: 220px;   /* ← 180px からアップ */
       max-width: 280px;
@@ -682,45 +606,36 @@
       background: linear-gradient(to right, rgba(10,11,18,0.98), rgba(10,11,18,0.96));
       border-right: 1px solid rgba(255,255,255,0.06);
     }
-
     table.schedule-grid th.date-header {
       text-align: center;
       min-width: var(--cell-width);
     }
-
     .date-header-main {
       color: var(--text-main);
       display: block;
       font-weight: 500;
     }
-
     .date-header-sub {
       font-size: 0.68rem;
       opacity: 0.8;
     }
-
     .date-header.today {
       background: linear-gradient(to bottom, rgba(98,195,255,0.55), rgba(10,12,20,0.95));
       color: #e6f5ff;
     }
-
     .date-header.today .date-header-main {
       color: #eaf7ff;
     }
-
     table.schedule-grid tbody tr:nth-child(even) td.row-header-cell {
       background: rgba(10,11,18,0.96);
     }
-
     table.schedule-grid tbody tr:nth-child(odd) td.row-header-cell {
       background: rgba(10,11,18,0.9);
     }
-
     table.schedule-grid td {
       padding: 0;
       background: transparent;
     }
-
     table.schedule-grid td.row-header-cell {
       position: sticky;
       left: 0;
@@ -732,7 +647,6 @@
       height: var(--cell-height);
       box-sizing: border-box;
     }
-
     .row-header-inner {
       padding: 4px 6px 4px 8px;
       display: grid;
@@ -740,7 +654,6 @@
       gap: 8px;
       align-items: start;
     }
-
     .row-header-top {
       display: flex;
       align-items: center;
@@ -769,7 +682,6 @@
       background: rgba(111,214,255,0.16);
       color: var(--text-main);
     }
-
     .row-header-title {
       flex: 1 1 auto;
       min-width: 0;
@@ -784,13 +696,11 @@
     .row-header-title:hover {
       text-decoration: underline;
     }
-
     .row-header-actions {
       display: flex;
       align-items: center;
       gap: 4px;
     }
-
     .row-header-tag {
       font-size: 0.65rem;
       padding: 2px 6px;
@@ -807,8 +717,6 @@
     .cell.track-selected {
       box-shadow: inset 0 0 0 1px rgba(111,214,255,0.45);
     }
-
-
     .cell {
       position: relative;
       height: var(--cell-height);
@@ -817,11 +725,9 @@
       background: var(--cell-bg);
       transition: background 0.15s ease-out, box-shadow 0.15s ease-out, outline 0.15s ease-out, opacity 0.15s ease-out;
     }
-
     .cell.today {
       background: linear-gradient(to bottom, rgba(98,195,255,0.65), rgba(98,195,255,0.28));
     }
-
     .cell-inner {
       position: relative;
       width: 100%;
@@ -832,7 +738,6 @@
       gap: 3px;
       padding: 0 4px;
     }
-
     .cell-select {
       position: absolute;
       right: 0;
@@ -851,7 +756,6 @@
       -webkit-appearance: none;
       cursor: pointer;
     }
-
     .cell-label {
       position: relative;
       z-index: 1;
@@ -864,7 +768,6 @@
       flex: 1;
       text-align: center;
     }
-
     .cell-dropdown-btn {
       position: relative;
       z-index: 1;
@@ -880,31 +783,25 @@
       margin-left: 4px;
       flex-shrink: 0;
     }
-
     .cell-dropdown-btn:hover {
       color: var(--gold-soft);
     }
-
     .cell.selected {
       outline: 2px solid rgba(111,214,255,0.9);
       outline-offset: -1px;
     }
-
     .cell-select option {
       background: #111827;
       color: #f9fafb;
     }
-
     .cell.dim {
       opacity: 0.25;
     }
-
     .empty-message {
       padding: 16px 14px;
       font-size: 0.8rem;
       color: var(--text-muted);
     }
-
     .grid-settings {
       display: flex;
       flex-direction: column;
@@ -912,14 +809,12 @@
       margin-top: 4px;
       font-size: 0.75rem;
     }
-
     .grid-settings-row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 6px;
     }
-
     .grid-settings-row label {
       display: flex;
       align-items: center;
@@ -927,7 +822,6 @@
       color: var(--text-muted);
       flex: 1;
     }
-
     .grid-settings-row input {
       width: 70px;
       padding: 3px 6px;
@@ -938,14 +832,11 @@
       font-size: 0.75rem;
       outline: none;
     }
-
     .grid-settings-row input:focus {
       border-color: rgba(111,214,255,0.7);
       box-shadow: 0 0 0 1px rgba(111,214,255,0.35);
     }
-
     .hidden { display: none !important; }
-
     .alt-ghost {
       position: fixed;
       z-index: 2000;
@@ -960,7 +851,6 @@
       opacity: 0.85;
       transform: translate(8px, 8px);
     }
-
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -970,7 +860,6 @@
       justify-content: center;
       z-index: 999;
     }
-
     .modal {
       background: #151722;
       border-radius: 16px;
@@ -980,7 +869,6 @@
       width: min(420px, 92vw);
       font-size: 0.8rem;
     }
-
     .modal-header {
       display: flex;
       align-items: center;
@@ -988,25 +876,21 @@
       gap: 8px;
       margin-bottom: 8px;
     }
-
     .modal-title {
       font-size: 0.86rem;
       font-weight: 600;
     }
-
     .modal-body {
       max-height: 320px;
       overflow-y: auto;
       padding-right: 2px;
     }
-
     .status-row {
       display: flex;
       align-items: center;
       gap: 6px;
       margin-bottom: 6px;
     }
-
     .status-name-input {
       flex: 1;
       padding: 4px 7px;
@@ -1017,12 +901,10 @@
       font-size: 0.8rem;
       outline: none;
     }
-
     .status-name-input:focus {
       border-color: rgba(111,214,255,0.7);
       box-shadow: 0 0 0 1px rgba(111,214,255,0.35);
     }
-
     .status-color-input {
       width: 40px;
       height: 24px;
@@ -1032,11 +914,9 @@
       background: transparent;
       cursor: pointer;
     }
-
     .status-delete-btn {
       padding-inline: 8px;
     }
-
     .modal-footer {
       display: flex;
       align-items: center;
@@ -1044,12 +924,10 @@
       margin-top: 8px;
       gap: 8px;
     }
-
     .modal-note {
       font-size: 0.72rem;
       color: var(--text-muted);
     }
-
     .context-menu {
       position: fixed;
       z-index: 3000;
@@ -1061,7 +939,6 @@
       padding: 4px 0;
       font-size: 0.78rem;
     }
-
     .context-menu-item {
       padding: 6px 12px;
       display: flex;
@@ -1070,16 +947,13 @@
       cursor: pointer;
       gap: 8px;
     }
-
     .context-menu-item:hover {
       background: rgba(255,255,255,0.06);
     }
-
     .context-menu-item span.shortcut {
       color: var(--text-muted);
       font-size: 0.72rem;
     }
-
     /* 入力用ポップアップ */
     .input-popover {
       position: fixed;
@@ -1092,12 +966,10 @@
       width: 240px;
       font-size: 0.78rem;
     }
-
     .input-popover-title {
       font-size: 0.8rem;
       margin-bottom: 6px;
     }
-
     .input-popover-input {
       width: 100%;
       padding: 5px 8px;
@@ -1109,18 +981,15 @@
       outline: none;
       margin-bottom: 6px;
     }
-
     .input-popover-input:focus {
       border-color: rgba(111,214,255,0.7);
       box-shadow: 0 0 0 1px rgba(111,214,255,0.35);
     }
-
     .input-popover-actions {
       display: flex;
       justify-content: flex-end;
       gap: 6px;
     }
-
     /* プロジェクトごとのグループ行（左カラム） */
     .project-group-row td {
       padding: 4px 8px;
@@ -1133,7 +1002,6 @@
       top: var(--project-group-offset); /* 日付ヘッダーの高さぶん下で固定 */
       z-index: 6;                       /* 行ヘッダーやセルより上に重ねる */
     }
-
     /* 右カラム用のダミー行（背景だけ合わせる） */
     .project-group-spacer td {
       background: linear-gradient(to right, rgba(20,20,30,0.98), rgba(20,20,30,0.9));
@@ -1145,30 +1013,25 @@
       top: var(--project-group-offset);
       z-index: 4;
     }
-
     .project-group-inner {
       display: flex;
       align-items: center;
       gap: 8px;
     }
-
     .project-group-row {
       cursor: pointer;
     }
-
     .project-group-row:hover .project-group-inner {
       background: rgba(255,255,255,0.03);
       border-radius: 8px;
       padding-inline: 4px;
     }
-
     .project-group-toggle {
       margin-left: auto;
       font-size: 0.8rem;
       color: var(--text-muted);
       cursor: pointer;
     }
-
     .row-header-memo-btn {
       font-size: 0.7rem;
       padding: 2px 6px;
@@ -1178,17 +1041,14 @@
       color: var(--text-muted);
       cursor: pointer;
     }
-
     .row-header-memo-btn:hover {
       border-color: rgba(111,214,255,0.7);
       color: var(--gold-soft);
     }
-
     /* ヒートマップ用 */
     .date-header-heat {
       position: relative;
     }
-
     .date-header-heat::before {
       content: "";
       position: absolute;
@@ -1201,7 +1061,6 @@
       );
       mix-blend-mode: screen;
     }
-
     /* セルメモのマーク */
     .cell.has-note::after {
       content: "";
@@ -1214,7 +1073,6 @@
       background: var(--gold-soft);
       box-shadow: 0 0 6px rgba(111,214,255,0.8);
     }
-
     /* セルメモ用ツールチップ */
     .cell-tooltip {
       position: fixed;
@@ -1229,23 +1087,19 @@
       color: var(--text-main);
       pointer-events: none;
     }
-
     .cell-tooltip.hidden {
       display: none;
     }
-
     .project-group-name {
       font-size: 0.8rem;
       font-weight: 600;
       color: var(--gold-soft);
     }
-
     .project-group-deadline {
       font-size: 0.72rem;
       color: var(--text-muted);
       margin-left: 12px;
     }
-
     .project-group-dot {
       width: 9px;
       height: 9px;
@@ -1253,35 +1107,28 @@
       background: var(--gold-soft);
       box-shadow: 0 0 10px rgba(111,214,255,0.7);
     }
-
     body.hide-row-tags .row-header-tag {
       display: none;
     }
-
     /* クライアントビュー用 */
     body.client-view-mode .sidebar {
       display: none;
     }
-
     body.client-view-mode .backup-info {
       display: none;
     }
-
     body.client-view-mode .row-header-actions,
     body.client-view-mode .cell-dropdown-btn {
       display: none;
     }
-
     body.client-view-mode .grid-settings,
     body.client-view-mode #showAllBtn,
     body.client-view-mode #showSelectedBtn {
       display: none;
     }
-
     body.client-view-mode .grid-shell {
       border-radius: 12px;
     }
-
     @media (max-width: 980px) {
       body { padding: 8px; }
       .app-shell {
@@ -1301,7 +1148,6 @@
       }
       .backup-info { justify-content: flex-start; }
     }
-
     @media (max-width: 640px) {
       .app-shell { border-radius: 18px; }
       .sidebar-controls {
@@ -1311,7 +1157,6 @@
       .section-label { margin-top: 4px; }
       .app-title-text { max-width: 200px; }
     }
-
     @media print {
       body {
         padding: 0;
@@ -1364,8 +1209,8 @@
         background: #f5f5f5;
       }
     }
-        /* 締切ヘッダーを赤いグラデーションにして、セル側は太めの枠にする */
-        .date-header.deadline {
+    /* 締切ヘッダーを赤いグラデーションにして、セル側は太めの枠にする */
+    .date-header.deadline {
           background: linear-gradient(
             to bottom,
             rgba(255,120,120,0.85),
@@ -1373,100 +1218,81 @@
           );
           color: #ffecec;
         }
-
-        .date-header.deadline .date-header-main {
+    .date-header.deadline .date-header-main {
           color: #ffffff;
         }
-
-        .date-header.deadline .date-header-sub {
+    .date-header.deadline .date-header-sub {
           color: #ffd1d1;
         }
-
-        /* 案件のセル側は少し太めの枠にする */
-        .cell.deadline-col {
+    /* 案件のセル側は少し太めの枠にする */
+    .cell.deadline-col {
           box-shadow: inset 0 0 0 2px rgba(255,120,120,0.5);
         }
-
     /* Light theme overrides */
     body.theme-light {
       background: radial-gradient(circle at top left, #f8f9fd 0%, #eef2fb 55%, #e8edf7 100%);
       color: var(--text-main);
     }
-
     body.theme-light .app-shell {
       background: var(--bg-accent);
       border-color: rgba(8,12,22,0.08);
       box-shadow: var(--shadow-soft);
     }
-
     body.theme-light .app-shell::before {
       background: radial-gradient(circle at top right, rgba(111,214,255,0.2), transparent 55%);
       mix-blend-mode: normal;
       opacity: 0.8;
     }
-
     body.theme-light .sidebar {
       background: linear-gradient(160deg, rgba(255,255,255,0.96), rgba(245,246,252,0.95));
       border-right: 1px solid rgba(8,12,22,0.06);
     }
-
     body.theme-light .main {
       background: linear-gradient(150deg, rgba(255,255,255,0.8), rgba(235,243,255,0.9));
       backdrop-filter: blur(18px);
       border-left: 1px solid rgba(8,12,22,0.08);
     }
-
     body.theme-light .project-list {
       background: #ffffff;
       border-color: rgba(8,12,22,0.08);
     }
-
     body.theme-light .project-item:hover {
       background: rgba(8,12,22,0.04);
     }
-
     body.theme-light .project-item.active {
       background: rgba(111,214,255,0.18);
       border-color: rgba(193,139,0,0.5);
     }
-
     body.theme-light .top-bar {
       background: rgba(255,255,255,0.85);
       border-color: rgba(8,12,22,0.08);
       box-shadow: 0 12px 32px rgba(8,12,22,0.08);
       backdrop-filter: blur(14px);
     }
-
     body.theme-light .backup-status {
       background: rgba(8,12,22,0.03);
       border-color: rgba(8,12,22,0.06);
     }
-
     body.theme-light .btn {
       border-color: rgba(8,12,22,0.08);
       background: rgba(8,12,22,0.02);
       color: var(--text-main);
     }
-
     body.theme-light .btn-soft {
       background: rgba(8,12,22,0.04);
     }
-
     body.theme-light .btn-soft:hover {
       background: rgba(8,12,22,0.07);
     }
-
     body.theme-light .btn-ghost {
       border-color: rgba(8,12,22,0.05);
       color: var(--text-muted);
     }
-
     body.theme-light .btn-ghost.active {
       background: rgba(111,214,255,0.18);
       border-color: rgba(111,214,255,0.5);
       color: #1f4f86;
     }
-
     body.theme-light .range-settings input,
     body.theme-light .grid-settings-row input,
     body.theme-light .status-name-input,
@@ -1477,25 +1303,21 @@
       border-color: rgba(8,12,22,0.1);
       color: var(--text-main);
     }
-
     body.theme-light .grid-shell {
       background: linear-gradient(150deg, rgba(255,255,255,0.9), rgba(235,243,255,0.9));
       border-color: rgba(8,12,22,0.08);
       box-shadow: 0 12px 32px rgba(8,12,22,0.08);
       backdrop-filter: blur(16px);
     }
-
     body.theme-light .grid-wrapper {
       background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(240,246,255,0.92));
       border-color: rgba(8,12,22,0.06);
       backdrop-filter: blur(14px);
     }
-
     body.theme-light table.schedule-grid thead {
       background: linear-gradient(to bottom, #fdfefe, #eef2fb);
       box-shadow: 0 4px 10px rgba(8,12,22,0.08);
     }
-
     body.theme-light .date-header-heat::before {
       background: linear-gradient(
         to bottom,
@@ -1505,7 +1327,6 @@
       mix-blend-mode: multiply;
       opacity: var(--heat-intensity, 0);
     }
-
     body.theme-light .grid-header-row {
       background: rgba(255,255,255,0.96);
       border: 1px solid rgba(8,12,22,0.12);
@@ -1514,56 +1335,45 @@
       color: #0a162c;
       text-shadow: none;
     }
-
     body.theme-light .grid-header-right {
       background: rgba(255,255,255,0.86);
       border: 1px solid rgba(8,12,22,0.12);
       color: #0a162c;
     }
-
     body.theme-light table.schedule-grid th,
     body.theme-light table.schedule-grid td {
       border-bottom-color: rgba(8,12,22,0.06);
     }
-
     body.theme-light table.schedule-grid th.row-header {
       background: linear-gradient(to right, #f8f9fd, #eef2fb);
       border-right-color: rgba(8,12,22,0.06);
     }
-
     body.theme-light table.schedule-grid tbody tr:nth-child(even) td.row-header-cell {
       background: #f7f8fc;
     }
-
     body.theme-light table.schedule-grid tbody tr:nth-child(odd) td.row-header-cell {
       background: #ffffff;
     }
-
     body.theme-light table.schedule-grid td.row-header-cell {
       border-right-color: rgba(8,12,22,0.06);
     }
-
     body.theme-light .cell {
       background: #ffffff;
       border-left: 1px solid rgba(8,12,22,0.08);
     }
-
     body.theme-light .cell.today {
       background: linear-gradient(to bottom, rgba(111,214,255,0.4), rgba(111,214,255,0.2));
     }
-
     body.theme-light .cell-label {
       color: #1f2430 !important;
     }
     body.theme-light .cell-select {
       color: #1f2430 !important;
     }
-
     body.theme-light .cell-select option {
       background: #ffffff;
       color: #1f2430;
     }
-
     body.theme-light .modal,
     body.theme-light .context-menu,
     body.theme-light .input-popover,
@@ -1573,60 +1383,47 @@
       box-shadow: 0 16px 40px rgba(8,12,22,0.14);
       color: var(--text-main);
     }
-
     body.theme-light .cell-tooltip {
       color: var(--text-main);
     }
-
     body.theme-light .project-group-row td {
       background: linear-gradient(to right, #f4f6fb, #eef2fb);
       border-bottom-color: rgba(8,12,22,0.06);
     }
-
     body.theme-light .row-header-memo-btn {
       background: rgba(8,12,22,0.04);
       border-color: rgba(8,12,22,0.12);
       color: var(--text-muted);
     }
-
     body.theme-light .row-header-memo-btn:hover {
       border-color: rgba(98,195,255,0.5);
       color: #245f9c;
     }
-
     body.theme-light .row-header-tag {
       border: 1px solid rgba(98,195,255,0.45);
       color: #1f4f86;
       background: #e9f5ff;
     }
-
     body.theme-light .project-group-name {
       color: #1f4f86;
     }
-
     body.theme-light .project-group-dot {
       background: #62c3ff;
       box-shadow: 0 0 10px rgba(98,195,255,0.65);
     }
-
     body.theme-light .date-header.today {
       background: linear-gradient(to bottom, rgba(98,195,255,0.4), #f1f8ff);
       color: #1f4f86;
     }
-
     body.theme-light .date-header.today .date-header-main {
       color: #1f4f86;
     }
-
     body.theme-light #trackMemoText,
     body.theme-light #cellNoteTextarea {
       background: rgba(8,12,22,0.04) !important;
       color: var(--text-main) !important;
       border-color: rgba(8,12,22,0.12) !important;
     }
-
-  
-
     /* ====== Portal埋め込み（iframe）用 ====== */
     body.embedded {
       padding: 0;
@@ -1651,11 +1448,11 @@
     }
 
   </style>
-  <script type="module" crossorigin src="/music-sheet/assets/schedule-portal-wXIdrYiQ.js"></script>
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-B0-OTnKT.js">
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-B6LBwd9E.js">
-  <link rel="modulepreload" crossorigin href="/music-sheet/assets/tabulator_esm-D-Igvjbx.js">
-  <link rel="stylesheet" crossorigin href="/music-sheet/assets/tabulator-fleYdbtK.css">
+  <script type="module" crossorigin src="/music-sheet/assets/schedule-portal-C4RSbHSP.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-BYm7NlOb.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-DUzmoriO.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/tabulator_esm-7yQEXY9l.js">
+  <link rel="stylesheet" crossorigin href="/music-sheet/assets/tabulator_esm-fleYdbtK.css">
 </head>
 <body>
   <div id="allMode" style="display:none;">
@@ -1905,3 +1702,4 @@
 
 </body>
 </html>
+

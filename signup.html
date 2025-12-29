@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x4F5C;&#x6210; | Music Sheet Hub</title>
+  <meta name="description" content="&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x4F5C;&#x6210;&#x3068;&#x30ED;&#x30B0;&#x30A4;&#x30F3;&#x306E;&#x30DA;&#x30FC;&#x30B8;&#x3067;&#x3059;&#x3002;" />
+  <style>[x-cloak]{display:none}</style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Sora", "Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "sans-serif"],
+          },
+          colors: {
+            brand: {
+              50: "#f0f9ff",
+              100: "#e0f2fe",
+              200: "#bae6fd",
+              300: "#7dd3fc",
+              400: "#38bdf8",
+              500: "#0ea5e9",
+              600: "#0284c7",
+              700: "#0369a1",
+              800: "#075985",
+              900: "#0c4a6e",
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <script type="module" crossorigin src="/music-sheet/assets/signup-DGvsJ4T0.js"></script>
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/index.esm-BYm7NlOb.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/firebase-DUzmoriO.js">
+  <link rel="modulepreload" crossorigin href="/music-sheet/assets/nav-B79d_qBo.js">
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 font-sans">
+  <div class="relative overflow-hidden">
+    <div class="absolute inset-0 -z-10 bg-gradient-to-br from-brand-50 via-slate-50 to-white"></div>
+    <div class="absolute -top-24 left-1/2 h-64 w-[620px] -translate-x-1/2 rounded-full bg-brand-100/70 blur-3xl"></div>
+
+    <header class="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
+      <a href="./index.html" class="flex items-center gap-3">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-white shadow-lg">
+          <span class="text-lg font-semibold">MS</span>
+        </div>
+        <div>
+          <div class="text-xs uppercase tracking-[0.32em] text-slate-400">Music Sheet Hub</div>
+          <div class="text-lg font-semibold">Signup</div>
+        </div>
+      </a>
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <span id="userPill" class="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">&#x672A;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</span>
+        <button id="btnLogin" class="inline-flex items-center gap-2 rounded-full bg-brand-700 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800" type="button">Google&#x3067;&#x30ED;&#x30B0;&#x30A4;&#x30F3;</button>
+        <button id="btnLogout" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" type="button" style="display:none;">&#x30ED;&#x30B0;&#x30A2;&#x30A6;&#x30C8;</button>
+      </div>
+    </header>
+
+    <main class="mx-auto w-full max-w-6xl px-6 pb-20 pt-6">
+      <section class="grid gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+        <div class="rounded-3xl border border-white/70 bg-white/80 p-8 shadow-xl shadow-slate-200/60 backdrop-blur">
+          <div class="inline-flex items-center gap-2 rounded-full border border-brand-200/70 bg-brand-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-brand-700">
+            Signup
+            <span class="h-1.5 w-1.5 rounded-full bg-brand-500"></span>
+          </div>
+          <h1 class="mt-6 text-3xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-4xl">
+            &#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x4F5C;&#x6210;
+          </h1>
+          <p class="lead mt-4 text-base leading-relaxed text-slate-500">
+            &#x30ED;&#x30B0;&#x30A4;&#x30F3;&#x3057;&#x3066;&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x3092;&#x4F5C;&#x6210;&#x3057;&#x307E;&#x3059;&#x3002;&#x62DB;&#x5F85;&#x3055;&#x308C;&#x305F;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x306F;&#x4E0B;&#x306B;&#x8868;&#x793A;&#x3055;&#x308C;&#x307E;&#x3059;&#x3002;
+          </p>
+          <div class="mt-6 flex flex-wrap items-center gap-3">
+            <a id="accountLink" class="inline-flex items-center gap-2 rounded-full bg-brand-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 hover:bg-brand-800" href="./account.html" style="display:none;">&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x7BA1;&#x7406;&#x3078;</a>
+            <a id="adminLink" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-slate-300" href="./admin.html" style="display:none;">&#x30B5;&#x30FC;&#x30D3;&#x30B9;&#x7BA1;&#x7406;&#x3078;</a>
+          </div>
+        </div>
+
+        <div class="grid gap-6">
+          <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-lg shadow-slate-200/60">
+            <div class="text-xs uppercase tracking-[0.2em] text-slate-400">Steps</div>
+            <h2 class="mt-2 text-xl font-semibold">&#x304B;&#x3093;&#x305F;&#x3093;3&#x30B9;&#x30C6;&#x30C3;&#x30D7;</h2>
+            <ol class="mt-4 space-y-3 text-sm text-slate-500">
+              <li class="flex items-start gap-3">
+                <span class="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">1</span>
+                <span><span class="font-semibold text-slate-700">&#x30ED;&#x30B0;&#x30A4;&#x30F3;</span> &#x62DB;&#x5F85;&#x3055;&#x308C;&#x305F;Google&#x30A2;&#x30AB;&#x30A6;&#x30F3;&#x30C8;&#x3067;&#x30ED;&#x30B0;&#x30A4;&#x30F3;&#x3002;</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">2</span>
+                <span><span class="font-semibold text-slate-700">&#x62DB;&#x5F85;&#x78BA;&#x8A8D;</span> &#x53C2;&#x52A0;&#x4E88;&#x5B9A;&#x306E;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x3092;&#x30C1;&#x30A7;&#x30C3;&#x30AF;&#x3002;</span>
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700">3</span>
+                <span><span class="font-semibold text-slate-700">&#x53C2;&#x52A0;</span> &#x53C2;&#x52A0;&#x30DC;&#x30BF;&#x30F3;&#x3067;&#x30B9;&#x30E0;&#x30FC;&#x30BA;&#x306B;&#x5165;&#x5BA4;&#x3002;</span>
+              </li>
+            </ol>
+          </div>
+          <div class="rounded-3xl border border-brand-200 bg-brand-50 p-6">
+            <h3 class="text-sm font-semibold text-brand-700">&#x62DB;&#x5F85;&#x78BA;&#x8A8D;</h3>
+            <p class="mt-2 text-sm text-brand-800">&#x62DB;&#x5F85;&#x3055;&#x308C;&#x305F;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;&#x306F;&#x4E0B;&#x306B;&#x8868;&#x793A;&#x3055;&#x308C;&#x307E;&#x3059;&#x3002;</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-16 rounded-3xl border border-slate-200 bg-white p-6 shadow-md shadow-slate-200/50">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="inviteTitle" class="text-lg font-semibold">&#x53C2;&#x52A0;&#x4E2D;&#x306E;&#x30D7;&#x30ED;&#x30B8;&#x30A7;&#x30AF;&#x30C8;</h2>
+          <span id="inviteMsg" class="text-xs text-slate-400"></span>
+        </div>
+        <div id="inviteList" class="mt-4 grid gap-4 md:grid-cols-2"></div>
+      </section>
+    </main>
+  </div>
+
+</body>
+</html>
