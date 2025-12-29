@@ -89,9 +89,37 @@ service cloud.firestore {
     // - 管理用途で admin は全ユーザー read 可（必要な時だけ読む想定）
     // ==========
     match /users/{uid} {
-      allow create: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          "email",
+          "emailNorm",
+          "displayName",
+          "photoURL",
+          "status",
+          "roleGlobal",
+          "plan",
+          "subscriptionStatus",
+          "createdAt",
+          "lastSeenAt"
+        ])
+        && request.resource.data.status == "active"
+        && request.resource.data.roleGlobal == "user"
+        && request.resource.data.plan == "free"
+        && request.resource.data.subscriptionStatus == "inactive";
       allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
-      allow update: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            "email",
+            "emailNorm",
+            "displayName",
+            "photoURL",
+            "lastSeenAt"
+          ])
+        );
     }
 
     // ==========

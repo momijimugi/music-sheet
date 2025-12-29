@@ -5,12 +5,13 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   serverTimestamp,
-  writeBatch,
   where,
 } from "firebase/firestore";
 import { mountThemeToggle } from "./ui_common";
 import { auth, provider, db, upsertUserProfile, createProject } from "./firebase";
+import { mountNav } from "./nav";
 
 const base = import.meta.env.BASE_URL || "/";
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
@@ -22,17 +23,19 @@ const userPill = document.getElementById("userPill");
 const btnLogin = document.getElementById("btnLogin");
 const btnLogout = document.getElementById("btnLogout");
 const btnNewProject = document.getElementById("btnNewProject");
+const accountLink = document.getElementById("accountLink");
 const adminLink = document.getElementById("adminLink");
 const inviteMsg = document.getElementById("inviteMsg");
 const inviteList = document.getElementById("inviteList");
 
 const JP = {
-  metaDescription: "音楽制作チーム向けのプロジェクト共有ハブ",
-  lead: "ようこそ。音楽制作やスケジュールを共有して、プロジェクトを一緒に進めるためのポータルです。",
+  metaDescription: "アカウント作成とログインのページです。",
+  lead: "ログインしてアカウントを作成します。招待されたプロジェクトは下に表示されます。",
   notLoggedIn: "未ログイン",
   login: "Googleでログイン",
   logout: "ログアウト",
-  admin: "管理画面へ",
+  account: "アカウント管理へ",
+  admin: "サービス管理へ",
   inviteTitle: "参加中のプロジェクト",
   loginHint: "ログインすると招待されたプロジェクトが表示されます。",
   emailMissing: "メールアドレスが取得できませんでした。",
@@ -67,6 +70,7 @@ function mountStaticText() {
   if (lead) lead.textContent = JP.lead;
   if (btnLogin) btnLogin.textContent = JP.login;
   if (btnLogout) btnLogout.textContent = JP.logout;
+  if (accountLink) accountLink.textContent = JP.account;
   if (adminLink) adminLink.textContent = JP.admin;
   const inviteTitle = document.getElementById("inviteTitle");
   if (inviteTitle) inviteTitle.textContent = JP.inviteTitle;
@@ -91,7 +95,8 @@ async function fetchMemberProjectIds(uid) {
   return [...new Set(ids)];
 }
 
-async function fetchPendingInvites(emailLower) {
+async function fetchPendingInvites(email) {
+  const emailLower = normEmail(email);
   if (!emailLower) return [];
   const results = new Map();
   const addDoc = (docSnap) => {
@@ -108,11 +113,22 @@ async function fetchPendingInvites(emailLower) {
     });
   };
 
-  const q = query(
-    collectionGroup(db, "invites"),
-    where("emailLower", "==", emailLower)
-  );
-  const snap = await getDocs(q);
+  let snap = null;
+  try {
+    const q = query(
+      collectionGroup(db, "invites"),
+      where("emailLower", "==", emailLower),
+      where("usedBy", "==", null)
+    );
+    snap = await getDocs(q);
+  } catch (err) {
+    if (err?.code !== "failed-precondition") throw err;
+    const q = query(
+      collectionGroup(db, "invites"),
+      where("emailLower", "==", emailLower)
+    );
+    snap = await getDocs(q);
+  }
   snap.docs.forEach(addDoc);
 
   return [...results.values()];
@@ -146,7 +162,11 @@ btnNewProject?.addEventListener("click", async () => {
     await loadInvites(currentUser);
   } catch (err) {
     console.error(err);
-    setMsg(JP.createProjectFail + (err.code || err.message));
+    if (err?.code === "plan-limit") {
+      setMsg("無料プランではプロジェクトは2件までです。");
+    } else {
+      setMsg(JP.createProjectFail + (err.code || err.message));
+    }
   } finally {
     btnNewProject.disabled = false;
     // メッセージを少し待ってから元に戻す
@@ -162,16 +182,20 @@ btnNewProject?.addEventListener("click", async () => {
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
   await upsertUserProfile(user);
+  mountNav({ current: "signup", hideAdmin: !isAdminUser(user) });
   if (userPill) userPill.textContent = user?.email || JP.notLoggedIn;
   if (btnLogin) btnLogin.style.display = user ? "none" : "inline-flex";
   if (btnLogout) btnLogout.style.display = user ? "inline-flex" : "none";
   if (btnNewProject) btnNewProject.style.display = user ? "inline-flex" : "none";
+  if (accountLink) accountLink.style.display = user ? "inline-flex" : "none";
   if (adminLink) adminLink.style.display = isAdminUser(user) ? "inline-flex" : "none";
 
   if (!user) {
     setMsg(JP.loginHint);
     if (inviteList) inviteList.innerHTML = "";
     if (btnNewProject) btnNewProject.style.display = "none";
+    if (accountLink) accountLink.style.display = "none";
+    if (adminLink) adminLink.style.display = "none";
     return;
   }
 
@@ -294,32 +318,39 @@ async function loadInvites(user) {
       .map((item) => {
         const canAccess = item.type === "member";
         const statusLabel = canAccess ? JP.statusJoined : JP.statusInvite;
-        const statusClass = canAccess ? "ok" : "ng";
+        const statusClass = canAccess
+          ? "border-brand-200 bg-brand-50 text-brand-700"
+          : "border-slate-200 bg-slate-50 text-slate-600";
         const note = canAccess
           ? ""
-          : `<span class="inviteNote">${JP.noteJoin}</span>`;
+          : `<p class="mt-2 text-xs text-slate-500">${JP.noteJoin}</p>`;
         const joinButton = canAccess
           ? ""
-          : `<button class="btn primary small" data-act="join" data-project="${item.id}" data-invite="${item.inviteId}">${JP.join}</button>`;
+          : `<button type="button" class="inline-flex items-center justify-center rounded-full bg-brand-700 px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-brand-600/30 hover:bg-brand-800" data-act="join" data-project="${item.id}" data-invite="${item.inviteId}">${JP.join}</button>`;
         const portalLink = canAccess
-          ? `<a class="btn ghost" data-project="${item.id}" href="${base}portal.html?project=${encodeURIComponent(item.id)}">Portal</a>`
-          : `<span class="btn ghost disabled" aria-disabled="true">Portal</span>`;
+          ? `<a class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" data-project="${item.id}" href="${base}portal.html?project=${encodeURIComponent(item.id)}">Portal</a>`
+          : `<span class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed" aria-disabled="true">Portal</span>`;
         const sheetLink = canAccess
-          ? `<a class="btn ghost" data-project="${item.id}" href="${base}sheet.html?project=${encodeURIComponent(item.id)}">Music Sheet</a>`
-          : `<span class="btn ghost disabled" aria-disabled="true">Music Sheet</span>`;
+          ? `<a class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 shadow-sm hover:border-slate-300" data-project="${item.id}" href="${base}sheet.html?project=${encodeURIComponent(item.id)}">Music Sheet</a>`
+          : `<span class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed" aria-disabled="true">Music Sheet</span>`;
         return `
-        <div class="inviteItem">
-          <div class="inviteTitle">${item.name}</div>
-          <div class="inviteMeta">
-            <span class="inviteStatus ${statusClass}">${statusLabel}</span>
-            ${note}
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-md shadow-slate-200/50">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="text-lg font-semibold text-slate-900">${item.name}</div>
+              <div class="mt-2 inline-flex items-center gap-2 text-xs">
+                <span class="inline-flex items-center rounded-full border ${statusClass} px-3 py-1 text-xs font-semibold">${statusLabel}</span>
+              </div>
+              ${note}
+            </div>
+            <div class="text-xs text-slate-400">ID: ${item.id}</div>
           </div>
-          <div class="inviteActions">
+          <div class="mt-4 flex flex-wrap items-center gap-2">
             ${joinButton}
             ${portalLink}
             ${sheetLink}
           </div>
-          <div class="inviteHint">project: ${item.id}</div>
+          <div class="mt-3 text-xs text-slate-400">project: ${item.id}</div>
         </div>
       `;
       })
@@ -335,21 +366,47 @@ async function loadInvites(user) {
         const prev = joinBtn.textContent;
         joinBtn.textContent = JP.joining;
         try {
-          const batch = writeBatch(db);
-          const memberRef = doc(db, "projects", projectId, "members", uid);
-          const inviteRef = doc(db, "projects", projectId, "invites", inviteId);
-          batch.set(memberRef, {
-            role: DEFAULT_MEMBER_ROLE,
-            emailLower: email,
-            joinedAt: serverTimestamp(),
-            uid: uid, //
-            inviteId,
+          await runTransaction(db, async (tx) => {
+            const memberRef = doc(db, "projects", projectId, "members", uid);
+            const inviteRef = doc(db, "projects", projectId, "invites", inviteId);
+            const inviteSnap = await tx.get(inviteRef);
+            if (!inviteSnap.exists()) {
+              const err = new Error("invite-missing");
+              err.code = "invite-missing";
+              throw err;
+            }
+            const inviteData = inviteSnap.data() || {};
+            const inviteEmail = normEmail(inviteData.emailLower);
+            if (!inviteEmail || inviteEmail !== email) {
+              const err = new Error("invite-email-mismatch");
+              err.code = "invite-email-mismatch";
+              throw err;
+            }
+            if (inviteData.usedBy != null) {
+              const err = new Error("invite-used");
+              err.code = "invite-used";
+              throw err;
+            }
+            const memberSnap = await tx.get(memberRef);
+            if (memberSnap.exists()) {
+              const err = new Error("already-member");
+              err.code = "already-member";
+              throw err;
+            }
+
+            tx.set(memberRef, {
+              uid,
+              role: inviteData.role || DEFAULT_MEMBER_ROLE,
+              email: user?.email || null,
+              displayName: user?.displayName || null,
+              joinedAt: serverTimestamp(),
+              inviteId,
+            });
+            tx.update(inviteRef, {
+              usedBy: uid,
+              usedAt: serverTimestamp(),
+            });
           });
-          batch.update(inviteRef, {
-            usedBy: uid,
-            usedAt: serverTimestamp(),
-          });
-          await batch.commit();
           await loadInvites(user);
         } catch (err) {
           console.error(err);

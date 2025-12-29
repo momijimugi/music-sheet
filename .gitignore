@@ -15,6 +15,8 @@ dist-ssr
 .vite
 .env
 Music sheet.txt
+pines-main
+stripe-sample-code
 
 # Editor directories and files
 .vscode/*

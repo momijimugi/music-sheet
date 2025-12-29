@@ -993,6 +993,33 @@ function nextMNumber() {
 
 let selectedId = null;
 
+const detailFieldIds = [
+  "f_m",
+  "f_v",
+  "f_demo",
+  "f_scene",
+  "f_director_new",
+  "f_comment_new",
+  "f_reference_shared",
+  "f_reference",
+  "f_status",
+  "f_len",
+  "f_note",
+  "f_in",
+  "f_out",
+];
+
+function setDetailEnabled(enabled){
+  detailFieldIds.forEach((id) => {
+    const el = $(id);
+    if (el) el.disabled = !enabled;
+  });
+  const interval = $("f_interval");
+  if (interval) interval.disabled = true;
+}
+
+setDetailEnabled(false);
+
 function setInspector(row){
   const directorInput = $("f_director_new");
   const directorBtn = $("btnAddDirectorFB");
@@ -1001,8 +1028,9 @@ function setInspector(row){
 
   if(!row){
     selectedId = null;
+    setDetailEnabled(false);
     if ($("selMeta")) {
-      $("selMeta").textContent = "行を選択すると表示されます";
+      $("selMeta").textContent = "先に行を選択してね";
       $("selMeta").classList.add("selMetaEmpty");
     }
     renderDirectorLog([]);
@@ -1018,6 +1046,13 @@ function setInspector(row){
     }
     if (commentBtn) commentBtn.disabled = true;
 
+    if ($("f_m")) $("f_m").value = "";
+    if ($("f_v")) $("f_v").value = "";
+    if ($("f_demo")) $("f_demo").value = "";
+    if ($("f_scene")) $("f_scene").value = "";
+    if ($("f_status")) $("f_status").value = "";
+    if ($("f_len")) $("f_len").value = "";
+    if ($("f_note")) $("f_note").value = "";
     setReferenceValue("");
     $("f_in").value = "";
     $("f_out").value = "";
@@ -1025,6 +1060,7 @@ function setInspector(row){
     return;
   }
 
+  setDetailEnabled(true);
   if (directorInput) directorInput.disabled = !canEditDirector();
   if (directorBtn) directorBtn.disabled = !canEditDirector();
   if (commentInput) commentInput.disabled = !canEditComment();
@@ -1530,7 +1566,10 @@ document.addEventListener("mousedown", (e) => {
   const insideGrid = e.target.closest("#grid");
   const insideInspector = e.target.closest("#inspector");
   const keep = e.target.closest("button, input, select, textarea, a, .cardHead, .modal");
-  if (!insideGrid && !insideInspector && !keep) table.deselectRow();
+  if (!insideGrid && !insideInspector && !keep) {
+    table.deselectRow();
+    setInspector(null);
+  }
 });
 
 let moving = false;
@@ -1574,6 +1613,9 @@ function listen(projectId){
       }
     });
     table.replaceData(rows);
+    if (rows.length === 0) {
+      setInspector(null);
+    }
     if (latestAt) {
       lastCueUpdatedAt = latestAt;
       lastCueUpdatedBy = latestBy;
@@ -1628,8 +1670,11 @@ onAuthStateChanged(auth, async (user) => {
         email,
         emailNorm,
         displayName: user.displayName || null,
+        photoURL: user.photoURL || null,
         status: "active",
         roleGlobal: "user",
+        plan: "free",
+        subscriptionStatus: "inactive",
         createdAt: serverTimestamp(),
         lastSeenAt: serverTimestamp(),
       });
@@ -1639,6 +1684,7 @@ onAuthStateChanged(auth, async (user) => {
         email,
         emailNorm,
         displayName: user.displayName || null,
+        photoURL: user.photoURL || null,
       });
     }
   }

@@ -17,9 +17,10 @@ export function mountNav({ current = "", projectId = "", hideAdmin = false } = {
 
   const items = [
     btn("home", "Home"),
-    !hideAdmin ? btn("admin", "Admin") : "",
+    btn("account", "Account"),
     btn("portal", "Portal"),
     btn("sheet", "Music Sheet"),
+    !hideAdmin ? btn("admin", "Admin") : "",
   ].filter(Boolean);
   nav.innerHTML = items.join("");
 
@@ -37,11 +38,17 @@ export function mountNav({ current = "", projectId = "", hideAdmin = false } = {
         base +
         (go === "home"
           ? "index.html"
-          : go === "admin"
-            ? "admin.html"
-            : go === "portal"
-              ? "portal.html"
-              : "sheet.html");
+          : go === "signup"
+            ? "signup.html"
+            : go === "account"
+              ? "account.html"
+              : go === "pricing"
+                ? "pricing.html"
+                : go === "admin"
+                  ? "admin.html"
+                  : go === "portal"
+                    ? "portal.html"
+                    : "sheet.html");
 
       let pid = p0;
       if (go === "portal" || go === "sheet") {

@@ -87,7 +87,7 @@ if (!me) {
 }
 const projectPill = document.getElementById("portalProjectPill");
 const projectSwitcher = document.getElementById("projectSwitcher");
-const adminReturnLink = document.querySelector(".portalActions a[href$='admin.html']");
+const adminReturnLink = document.querySelector(".portalActions a[href$='account.html']");
 
 const ADMIN_EMAILS = (import.meta.env.VITE_ADMIN_EMAILS || "")
   .split(",").map(s=>s.trim()).filter(Boolean);
@@ -274,7 +274,7 @@ function applyAdminMode(){
   if (referenceAdmin) referenceAdmin.style.display = isAdmin ? "flex" : "none";
   if (pdfAdmin) pdfAdmin.style.display = isAdmin ? "flex" : "none";
   if (adminReturnLink) {
-    adminReturnLink.href = `${base}admin.html`;
+    adminReturnLink.href = `${base}account.html`;
     adminReturnLink.style.display = realAdmin ? "inline-flex" : "none";
   }
 
@@ -316,7 +316,7 @@ if (pSnap?.exists()) {
   const pdata = pSnap.data() || {};
   if (pdata.deleted) {
     alert("このプロジェクトは消去されています（管理者に連絡してください）");
-    location.replace(`${base}admin.html`);
+    location.replace(`${base}account.html`);
     throw new Error("deleted project");
   }
   if (!canAccessProject(me, pdata, project)) {
